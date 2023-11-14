@@ -1,0 +1,55 @@
+<?xml version='1.0'?>
+<sdf xmlns:drake="http://drake.mit.edu" version="1.8">
+  <model name='Tennis_ball'>
+    <link name='Tennis_ball'>
+      <inertial>
+        <pose>-0.002070390212519448 0.0009384609583061207 -0.0005500617767579621 0 0 0</pose>
+        <mass>0.058</mass>
+        <inertia>
+          <ixx>0.067</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.067</iyy>
+          <iyz>0</iyz>
+          <izz>0.067</izz>
+        </inertia>
+      </inertial>
+      <visual name='visual'>
+        <pose>0.0 0.0 0.0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>Tennis_ball.obj</uri>
+            <scale>0.0336683417 0.0336683417 0.0336683417</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name='collision'>
+        <pose>0.0 0.0 0.0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>Tennis_ball.obj</uri>
+            <scale>0.0336683417 0.0336683417 0.0336683417</scale>
+          </mesh>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0</mu>
+              <mu2>0</mu2>
+            </ode>
+          </friction>
+          <bounce>
+              <restitution_coefficient> 1. </restitution_coefficient>
+              <threshold>.0.</threshold>
+          </bounce>
+        </surface>
+        <drake:proximity_properties>
+          <drake:mu_dynamic>0.5</drake:mu_dynamic>
+          <drake:mu_static>0.5</drake:mu_static>
+          <drake:rigid_hydroelastic/>
+          <drake:hydroelastic_modulus>1.0e100</drake:hydroelastic_modulus>
+        </drake:proximity_properties>  
+      </collision>
+    </link>
+  </model>
+</sdf>
