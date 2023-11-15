@@ -1,4 +1,21 @@
-from pydrake.all import DiagramBuilder, Diagram
+from pydrake.all import (
+    AddMultibodyPlantSceneGraph,
+    BsplineTrajectory,
+    DiagramBuilder,
+    Diagram,
+    KinematicTrajectoryOptimization,
+    MeshcatVisualizer,
+    MeshcatVisualizerParams,
+    MinimumDistanceLowerBoundConstraint,
+    Parser,
+    PositionConstraint,
+    Rgba,
+    RigidTransform,
+    Role,
+    Solve,
+    StartMeshcat,
+)
+
 from pydrake.geometry import StartMeshcat
 from pydrake.systems.analysis import Simulator
 from manipulation.station import MakeHardwareStation, load_scenario
@@ -6,12 +23,11 @@ from manipulation.scenarios import AddRgbdSensors
 from utils import diagram_update_meshcat, station_visualize_camera, diagram_visualize_connections
 
 import matplotlib.pyplot as plt
-import os
+import numpy as np
 
 from scenario import scenario_data
 
 # Settings
-scenario_path = "scenario.yaml"
 close_button_str = "close"
 
 # Setting up meshcat
@@ -21,7 +37,6 @@ meshcat.AddButton(close_button_str)
 # Setting up the main diagram
 builder = DiagramBuilder()
 
-# scenario = load_scenario(filename=scenario_path)
 scenario = load_scenario(data=scenario_data)
 station = builder.AddSystem(MakeHardwareStation(scenario, meshcat=meshcat))
 
