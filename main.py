@@ -13,6 +13,7 @@ from pydrake.all import (
     RigidTransform,
     Role,
     Solve,
+    JointSliders,
     StartMeshcat,
 )
 
@@ -50,6 +51,17 @@ controller_plant = station.GetSubsystemByName(
 
 visualizer = MeshcatVisualizer.AddToBuilder(
     builder, station.GetOutputPort("query_object"), meshcat
+)
+
+# TEMPORARY
+teleop = builder.AddSystem(
+    JointSliders(
+        meshcat,
+        controller_plant,
+    )
+)
+builder.Connect(
+    teleop.get_output_port(), station.GetInputPort("iiwa.position")
 )
 
 from manipulation.meshcat_utils import WsgButton
