@@ -30,70 +30,65 @@ import numpy as np
 from scenario import scenario_data
 
 
-# --------------------------- MULTIBODYPLANT SETUP ----------------------------
-builder = DiagramBuilder()
-plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
-
-iiwa = AddPlanarIiwa(plant)
-wsg = AddWsg(plant, iiwa, roll=0.0, welded=True, sphere=True)
-
-parser = Parser(plant)
-ConfigureParser(parser)
-parser.AddModelsFromString(scenario_data, ".dmd.yaml")  # sdf format string
-
-# iiwa = plant.GetModelInstanceByName("iiwa")
-tennis_ball = plant.GetModelInstanceByName("Tennis_ball")
-
-plant.Finalize()
-
 # ------------------------------- MESHCAT SETUP -------------------------------
 close_button_str = "Close"
 meshcat = StartMeshcat()
 meshcat.AddButton(close_button_str)
 
+# -------------------------- HARDWARESTATION SETUP ----------------------------
+# Setting up the main diagram
+builder = DiagramBuilder()
+
+scenario = load_scenario(data=scenario_data)
+station = builder.AddSystem(MakeHardwareStation(scenario, meshcat=meshcat))
+station_context = station.CreateDefaultContext()
+
+plant = station.GetSubsystemByName("plant")
+controller_plant = station.GetSubsystemByName(
+    "iiwa.controller"
+).get_multibody_plant_for_control()
+
 visualizer = MeshcatVisualizer.AddToBuilder(
-    builder,
-    scene_graph,
-    meshcat,
-    MeshcatVisualizerParams(role=Role.kIllustration),
+    builder, station.GetOutputPort("query_object"), meshcat
 )
-collision_visualizer = MeshcatVisualizer.AddToBuilder(
-    builder,
-    scene_graph,
-    meshcat,
-    MeshcatVisualizerParams(
-        prefix="collision", role=Role.kProximity, visible_by_default=False
-    ),
+
+from manipulation.meshcat_utils import WsgButton
+wsg_teleop = builder.AddSystem(WsgButton(meshcat))
+builder.Connect(
+    wsg_teleop.get_output_port(0), station.GetInputPort("wsg.position")
 )
 
 diagram = builder.Build()
 diagram.set_name("object_catching_system")
-context = diagram.CreateDefaultContext()
-plant_context = plant.GetMyContextFromRoot(context)
 
-num_q = plant.num_positions()
-print(num_q)
-
-# plant.SetVelocities(plant_context, tennis_ball, np.ones(3))
-# plant.SetPositions(plant_context, tennis_ball, np.ones(7))
-
-diagram.ForcedPublish(context)  # Publish results to Diagram and MeshCat
-
-# AddMeshcatTriad(meshcat, "test", X_PT=RigidTransform(), opacity=0.5)
-
-
-# # Visualization
+# -------------------------------- SIMULATION ---------------------------------
 diagram_update_meshcat(diagram)
 diagram_visualize_connections(diagram, "diagram.svg")
-# station_visualize_camera(station, "camera0")
+station_visualize_camera(station, "camera0")
 
-# # Setting up the simulation
+# Setting up the simulation
 simulator = Simulator(diagram)
+simulator.set_target_realtime_rate(1.0)
+simulator_context = simulator.get_mutable_context()
+
+plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
+q0 = plant.GetPositions(
+    plant_context, plant.GetModelInstanceByName("iiwa")
+)
+station.GetInputPort("iiwa.position").FixValue(station_context, q0)
+station.GetInputPort("wsg.position").FixValue(station_context, [0])
+
 meshcat.StartRecording()
-simulator.AdvanceTo(5.0)
-visualizer.PublishRecording()
+simulator.AdvanceTo(10.0)
+
+
 
 while not meshcat.GetButtonClicks(close_button_str):
-    pass
+    
+    q_cmd = np.ones(7)
+    station.GetInputPort("iiwa.position").FixValue(station_context, q_cmd)
 
+    # station.GetInputPort("wsg.position").FixValue(station_context, [0])
 
+    # q_current = station.GetOutputPort("iiwa.position_measured").Eval(station_context)
+    # print(f"Current joint angles: {q_current}")
