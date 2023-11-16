@@ -33,14 +33,16 @@ from scenario import scenario_data
 # --------------------------- MULTIBODYPLANT SETUP ----------------------------
 builder = DiagramBuilder()
 plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
-# iiwa = AddPlanarIiwa(plant)
-# wsg = AddWsg(plant, iiwa, roll=0.0, welded=True, sphere=True)
+
+iiwa = AddPlanarIiwa(plant)
+wsg = AddWsg(plant, iiwa, roll=0.0, welded=True, sphere=True)
 
 parser = Parser(plant)
 ConfigureParser(parser)
 parser.AddModelsFromString(scenario_data, ".dmd.yaml")  # sdf format string
-# parser.AddModelsFromUrl("package://manipulation/pr2_shelves.dmd.yaml")
-# parser.AddModelsFromUrl("package://manipulation/shelves.sdf")[0]
+
+# iiwa = plant.GetModelInstanceByName("iiwa")
+tennis_ball = plant.GetModelInstanceByName("Tennis_ball")
 
 plant.Finalize()
 
@@ -72,11 +74,12 @@ plant_context = plant.GetMyContextFromRoot(context)
 num_q = plant.num_positions()
 print(num_q)
 
-# plant.SetPositions(plant_context, np.ones(num_q))
+# plant.SetVelocities(plant_context, tennis_ball, np.ones(3))
+# plant.SetPositions(plant_context, tennis_ball, np.ones(7))
 
 diagram.ForcedPublish(context)  # Publish results to Diagram and MeshCat
 
-# AddMeshcatTriad(meshcat, "goal pose", X_PT=RigidTransform(), opacity=0.5)
+# AddMeshcatTriad(meshcat, "test", X_PT=RigidTransform(), opacity=0.5)
 
 
 # # Visualization
