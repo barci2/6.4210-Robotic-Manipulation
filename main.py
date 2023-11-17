@@ -87,14 +87,6 @@ station = builder.AddSystem(MakeHardwareStation(scenario, meshcat=meshcat))
 station_context = station.CreateDefaultContext()
 scene_graph = station.GetSubsystemByName("scene_graph")
 
-# Add visualizer so we can play back the simulation for debugging purposes
-visualizer = MeshcatVisualizer.AddToBuilder(
-    builder,
-    station.GetOutputPort("query_object"),
-    meshcat,
-    MeshcatVisualizerParams(delete_on_initialization_event=False),
-)
-
 plant = station.GetSubsystemByName("plant")
 
 controller_plant = station.GetSubsystemByName(
@@ -120,7 +112,6 @@ builder.Connect(
     wsg_teleop.get_output_port(0), station.GetInputPort("wsg.position")
 )
 
-
 diagram = builder.Build()
 diagram.set_name("object_catching_system")
 
@@ -134,13 +125,10 @@ simulator = Simulator(diagram)
 simulator.set_target_realtime_rate(1.0)
 # simulator_context = simulator.get_mutable_context()
 
-# If we choose meshcat to record, we can see the simulation in realtime
-# meshcat.StartRecording()
-# If we choose visualizer to record, we can play back the simulation after
-visualizer.StartRecording(False)
+meshcat.StartRecording()
 simulator.AdvanceTo(10.0)
-# meshcat.PublishRecording()
-visualizer.PublishRecording()
+# Publish recording so we can play it back at varying speeds for debugging
+meshcat.PublishRecording()
 
 # while not meshcat.GetButtonClicks(close_button_str):
 
