@@ -10,6 +10,9 @@ def diagram_update_meshcat(diagram, context = None) -> None:
     diagram.ForcedPublish(context)
 
 def diagram_visualize_connections(diagram: Diagram, file: Union[BinaryIO, str]) -> None:
+    """
+    Create SVG file of system diagram.
+    """
     if type(file) is str:
         file = open(file, "bw")
     graphviz_str = diagram.GetGraphvizString()
@@ -17,10 +20,13 @@ def diagram_visualize_connections(diagram: Diagram, file: Union[BinaryIO, str]) 
     file.write(svg_data)
 
 def station_visualize_camera(station: Diagram, camera_name: str, context = None) -> None:
+    """
+    Show Camera view using matplotlib.
+    """
     if context is None:
         context = station.CreateDefaultContext()
     image = station.GetOutputPort(f"{camera_name}.rgb_image").Eval(context).data
-    print(image)
-    print(dir(image))
-    plt.imshow(image)
-    plt.show()
+    # print(image)
+    # print(dir(image))
+    # plt.imshow(image)
+    # plt.show()
