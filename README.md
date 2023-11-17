@@ -26,8 +26,14 @@ The overall architecture is based largely on this example: https://deepnote.com/
 
  - The program contains 3 core "systems":
    1. Object Ballistic Trajectory Estimator
+     - input ports:
+     - output ports: Trajectory object
    2. Grasp Selector
+     - input ports: 
+     - output ports:
    3. Motion Planner
+     - input ports: 
+     - output ports: 
  - Each individual "system" is implemented as LeafSystem. These systems will all be added to the same diagram builder, which will link their inputs and outputs together.
  - A State Machine detemines helps each leaf system determine what to do at all times. The State Machine has the following states that transition linearly:
    1. WAITING_FOR_OBJECT
@@ -39,11 +45,9 @@ The overall architecture is based largely on this example: https://deepnote.com/
 
 
 ## TODO
- - How to add model drivers to MBP
- - Add cameras
+ - Add cameras in scene in correct locations
  - Add flying object
  - Add skeleton for perception and grasping
- - Add hand
 
 ## Notes
 

@@ -1,4 +1,22 @@
 import os
+from manipulation.station import add_directives
+
+"""
+List of tuples of YCB obj filenames and the link name within the SDF file
+
+Potential future YCB Objects to add:
+ - 11: banana
+ - 54: golf ball
+"""
+OBJECTS = [
+    # ("003_cracker_box.sdf", "base_link_cracker"),
+    ("004_sugar_box.sdf", "base_link_sugar"),
+    ("005_tomato_soup_can.sdf", "base_link_soup"),
+    # ("006_mustard_bottle.sdf", "base_link_mustard"),
+    # ("009_gelatin_box.sdf", "base_link_gelatin"),
+    ("010_potted_meat_can.sdf", "base_link_meat"),
+    ("tennis_ball", "Tennis_ball")
+    ]
 
 tennis_ball_file = os.path.join(os.getcwd(), "object_files/Tennis_ball.sdf")
 
@@ -7,8 +25,6 @@ tennis_ball_file = os.path.join(os.getcwd(), "object_files/Tennis_ball.sdf")
 Notes:
  - If using iiwa7, weld `iiwa_link_0` to world. If using iiwa14, weld `base` to world.
    Only `link` tags can be welded (?)
-
-   file: package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf
 """
 scenario_data = """
 directives:
@@ -76,3 +92,33 @@ cameras:
 #             translation: [1.5, 0, 0.75]
 #             rotation: !Rpy {{ deg: [42, 33, 18] }}
 # """
+
+
+def throw_object(plant, parser):
+    """
+    Load in object and generate initial velocity.
+
+    Relevant YCB Object numbers:
+     - 2: sugar box
+     - 5: SPAM can
+     - 11: banana
+     - 54: golf ball
+    """
+    pass
+
+    object_yaml = f"""
+    directives:
+    - add_model:
+        name: Tennis_ball
+        file: file://{tennis_ball_file}
+        default_free_body_pose:
+            Tennis_ball:
+                translation: [1.5, 0, 0.75]
+                rotation: !Rpy {{ deg: [42, 33, 18] }}
+    """
+
+    parser.AddModelsFromString(object_yaml, ".dmd.yaml")  # sdf format string
+
+    # tennis_ball = plant.GetModelInstanceByName("Tennis_ball")
+
+    # scenario = add_directives(scenario, data=object_yaml)
