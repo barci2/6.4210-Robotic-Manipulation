@@ -88,7 +88,7 @@ scenario = add_directives(scenario, data=obj_directives)
 
 # Create HardwareStation
 station = builder.AddSystem(MakeHardwareStation(scenario, meshcat=meshcat))
-station_context = station.CreateDefaultContext()
+
 scene_graph = station.GetSubsystemByName("scene_graph")
 
 plant = station.GetSubsystemByName("plant")
@@ -97,7 +97,7 @@ controller_plant = station.GetSubsystemByName(
     "iiwa.controller"
 ).get_multibody_plant_for_control()
 
-# TEMPORARY TELEOP CONTROLS
+# TEMPORARY TELEOP CONTROLS (comment out the stuff in the while loop below for this to work)
 teleop = builder.AddSystem(
     JointSliders(
         meshcat,
@@ -126,6 +126,7 @@ diagram_visualize_connections(diagram, "diagram.svg")
 simulator = Simulator(diagram)
 simulator.set_target_realtime_rate(1.0)
 simulator_context = simulator.get_mutable_context()
+station_context = station.GetMyMutableContextFromRoot(simulator_context)
 plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
 
 # Freeze all objects for now (we'll unfreeze them when we're ready to throw them)
@@ -141,10 +142,10 @@ meshcat.Flush()  # Wait for the large object meshes to get to meshcat.
 while not meshcat.GetButtonClicks(close_button_str):
     simulator.AdvanceTo(simulator.get_context().get_time() + 1.0)
 
-    # q_cmd = np.ones(7)
-    # station.GetInputPort("iiwa.position").FixValue(station_context, q_cmd)
+    q_cmd = np.ones(7)
+    station.GetInputPort("iiwa.position").FixValue(station_context, q_cmd)
 
-    # station.GetInputPort("wsg.position").FixValue(station_context, [1])
+    station.GetInputPort("wsg.position").FixValue(station_context, [1])
 
     # q_current = station.GetOutputPort("iiwa.position_measured").Eval(station_context)
     # print(f"Current joint angles: {q_current}")
