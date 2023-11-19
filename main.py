@@ -9,6 +9,7 @@ from pydrake.all import (
     Rgba,
     RigidTransform,
     RotationMatrix,
+    SpatialVelocity,
     Role,
     Solve,
     JointSliders,
@@ -137,6 +138,17 @@ for obj in obj_model_instance_names:
     body = plant.get_body(body_idx)  # Body object
     pose = RigidTransform(RotationMatrix(), [1,0,2])
     plant.SetFreeBodyPose(plant_context, body, pose)
+
+    
+    # Define the spatial velocity
+    spatial_velocity = SpatialVelocity(
+        v = np.array([1, 0, 0]),  # m/s
+        w = np.array([0, 0, 0]),  # rad/s
+    )
+    plant.SetFreeBodySpatialVelocity(context = plant_context, body = body, V_WB = spatial_velocity)
+
+    # Unlock joint so object is subject to gravity
+    joint.Unlock(plant_context)
 
 
     # print(plant.GetBodyByName(obj))
