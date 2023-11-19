@@ -4,13 +4,11 @@ from pydrake.all import (
     DiagramBuilder,
     Diagram,
     KinematicTrajectoryOptimization,
-    MeshcatVisualizer,
-    MeshcatVisualizerParams,
     MinimumDistanceLowerBoundConstraint,
-    Parser,
     PositionConstraint,
     Rgba,
     RigidTransform,
+    RotationMatrix,
     Role,
     Solve,
     JointSliders,
@@ -23,12 +21,12 @@ from manipulation.station import MakeHardwareStation, load_scenario
 from manipulation.scenarios import AddRgbdSensors, AddShape
 from manipulation.utils import ConfigureParser
 from manipulation.meshcat_utils import AddMeshcatTriad
-from utils import diagram_update_meshcat, station_visualize_camera, diagram_visualize_connections
 
 import matplotlib.pyplot as plt
 import numpy as np
 import time
 
+from utils import diagram_update_meshcat, station_visualize_camera, diagram_visualize_connections
 from scenario import *
 
 NUM_THROWS = 5
@@ -56,8 +54,7 @@ directives:
 for i in range(NUM_THROWS):
     obj_idx = rng.integers(0, len(OBJECTS))
 
-    print(obj_idx)
-    print(OBJECTS[obj_idx])
+    # print(f"{obj_idx}: {OBJECTS[obj_idx]}")
 
     # Custom SDF Objects
     if OBJECTS[obj_idx][0] == "tennis_ball":
@@ -122,7 +119,7 @@ diagram_update_meshcat(diagram)
 diagram_visualize_connections(diagram, "diagram.svg")
 # station_visualize_camera(station, "camera0", station_context)  # TODO: figure out why this is causing segfault
 
-# Setting up the simulation
+# Setting up the simulation and contexts
 simulator = Simulator(diagram)
 simulator.set_target_realtime_rate(1.0)
 simulator_context = simulator.get_mutable_context()
@@ -131,10 +128,20 @@ plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
 
 # Freeze all objects for now (we'll unfreeze them when we're ready to throw them)
 for obj in obj_model_instance_names:
-    joint_idx = plant.GetJointIndices(plant.GetModelInstanceByName(obj))[0]  # JointIndex object
+    model_instance = plant.GetModelInstanceByName(obj)  # ModelInstance object
+    joint_idx = plant.GetJointIndices(model_instance)[0]  # JointIndex object
     joint = plant.get_joint(joint_idx)  # Joint object
     joint.Lock(plant_context)
 
+    body_idx = plant.GetBodyIndices(model_instance)[0]  # BodyIndex object
+    body = plant.get_body(body_idx)  # Body object
+    pose = RigidTransform(RotationMatrix(), [1,0,2])
+    plant.SetFreeBodyPose(plant_context, body, pose)
+
+
+    # print(plant.GetBodyByName(obj))
+
+# Start simulation
 meshcat.StartRecording()
 simulator.AdvanceTo(0.1)
 meshcat.Flush()  # Wait for the large object meshes to get to meshcat.

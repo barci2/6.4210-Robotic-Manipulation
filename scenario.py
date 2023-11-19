@@ -83,17 +83,6 @@ cameras:
             rotation: !Rpy { deg: [-90, 0, 0]}
 """
 
-# scenario_data += f"""
-# - add_model:
-#     name: Tennis_ball
-#     file: file://{tennis_ball_file}
-#     default_free_body_pose:
-#         Tennis_ball:
-#             translation: [1.5, 0, 0.75]
-#             rotation: !Rpy {{ deg: [42, 33, 18] }}
-# """
-
-
 def throw_object(plant, parser):
     """
     Load in object and generate initial velocity.
@@ -105,19 +94,6 @@ def throw_object(plant, parser):
      - 54: golf ball
     """
     pass
-
-    object_yaml = f"""
-    directives:
-    - add_model:
-        name: Tennis_ball
-        file: file://{tennis_ball_file}
-        default_free_body_pose:
-            Tennis_ball:
-                translation: [1.5, 0, 0.75]
-                rotation: !Rpy {{ deg: [42, 33, 18] }}
-    """
-
-    parser.AddModelsFromString(object_yaml, ".dmd.yaml")  # sdf format string
 
     # tennis_ball = plant.GetModelInstanceByName("Tennis_ball")
 
