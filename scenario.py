@@ -1,5 +1,13 @@
-import os
+from pydrake.all import (
+    RigidTransform,
+    RotationMatrix,
+    SpatialVelocity,
+)
 from manipulation.station import add_directives
+
+import numpy as np
+import os
+import math
 
 """
 List of tuples of YCB obj filenames and the link name within the SDF file
@@ -83,18 +91,53 @@ cameras:
             rotation: !Rpy { deg: [-90, 0, 0]}
 """
 
-def throw_object(plant, parser):
+def throw_object(plant, plant_context, rng, obj_name):
     """
-    Load in object and generate initial velocity.
+    Move object to throwing position, generate initial velocity for object, then unfreeze its dynamics
 
-    Relevant YCB Object numbers:
-     - 2: sugar box
-     - 5: SPAM can
-     - 11: banana
-     - 54: golf ball
+    Args:
+        plant: MultbodyPlant from hardware station
+        plant_context: plant's context
+        rng: np.random.default_rng object to generate random positions/velocities
+        obj_name: string of the object's name in the scenario YAML (i.e. 'ycb2')
     """
-    pass
 
-    # tennis_ball = plant.GetModelInstanceByName("Tennis_ball")
+    # Getting relevant data from plant
+    model_instance = plant.GetModelInstanceByName(obj_name)  # ModelInstance object
+    joint_idx = plant.GetJointIndices(model_instance)[0]  # JointIndex object
+    joint = plant.get_joint(joint_idx)  # Joint object
 
-    # scenario = add_directives(scenario, data=object_yaml)
+    # Generate random object pose
+    z = 0.75  # fixed z for now
+    x = rng.uniform(2, 3) * rng.choice([-1, 1])
+    y = rng.uniform(2, 3) * rng.choice([-1, 1])
+
+    # Set object pose
+    body_idx = plant.GetBodyIndices(model_instance)[0]  # BodyIndex object
+    body = plant.get_body(body_idx)  # Body object
+    pose = RigidTransform(RotationMatrix(), [x,y,z])
+    plant.SetFreeBodyPose(plant_context, body, pose)
+
+    # Unlock joint so object is subject to gravity
+    joint.Unlock(plant_context)
+
+    v_magnitude = rng.uniform(5.0, 10.0)
+    angle_perturb = rng.uniform(0.1, 0.2) * rng.choice([-1, 1])  # must perturb by at least 0.1 rad to avoid throwing directly at iiwa
+    # ensure the perturbation is applied such that it directs the obj away from iiwa
+    if x*y > 0:  # x and y have same sign
+        cos = x / math.sqrt(x**2 + y**2) + angle_perturb
+        sin = y / math.sqrt(x**2 + y**2) - angle_perturb
+    else:
+        cos = x / math.sqrt(x**2 + y**2) + angle_perturb
+        sin = y / math.sqrt(x**2 + y**2) + angle_perturb
+    z_perturb = rng.uniform(-0.5, 0.5)
+    v_x = -v_magnitude * cos
+    v_y = -v_magnitude * sin 
+    v_z = 2 + z_perturb
+
+    # Define the spatial velocity
+    spatial_velocity = SpatialVelocity(
+        v = np.array([v_x, v_y, v_z]),  # m/s
+        w = np.array([0, 0, 0]),  # rad/s
+    )
+    plant.SetFreeBodySpatialVelocity(context = plant_context, body = body, V_WB = spatial_velocity)

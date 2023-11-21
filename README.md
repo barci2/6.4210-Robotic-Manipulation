@@ -46,7 +46,7 @@ The overall architecture is based largely on this example: https://deepnote.com/
 
 ## TODO
  - Add cameras in scene in correct locations
- - Add flying object
+ - Ensure thrown objects don't hit cameras
  - Add skeleton for perception and grasping
 
 ## Notes

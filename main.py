@@ -49,6 +49,8 @@ scenario = load_scenario(data=scenario_data)
 
 # Load objects to be thrown randomly. Put them reasonably off screen so they don't get in the way until we need them
 obj_model_instance_names = []  # list containing names for each object so we can retrieve them from the MBP
+current_obj_idx = 0
+
 obj_directives = """
 directives:
 """
@@ -65,7 +67,7 @@ for i in range(NUM_THROWS):
     file: file://{tennis_ball_file}
     default_free_body_pose:
         Tennis_ball:
-            translation: [0, 0, 2]
+            translation: [0, 0, 100]
             rotation: !Rpy {{ deg: [0, 0, 0] }}
         """
         obj_model_instance_names.append(f"Tennis_ball{i}")
@@ -77,7 +79,7 @@ for i in range(NUM_THROWS):
     file: package://drake/manipulation/models/ycb/sdf/{OBJECTS[obj_idx][0]}
     default_free_body_pose:
         {OBJECTS[obj_idx][1]}:
-            translation: [0, 0, 2]
+            translation: [0, 0, 100]
             rotation: !Rpy {{ deg: [0, 0, 0] }}
         """
         obj_model_instance_names.append(f"ycb{i}")
@@ -134,24 +136,8 @@ for obj in obj_model_instance_names:
     joint = plant.get_joint(joint_idx)  # Joint object
     joint.Lock(plant_context)
 
-    body_idx = plant.GetBodyIndices(model_instance)[0]  # BodyIndex object
-    body = plant.get_body(body_idx)  # Body object
-    pose = RigidTransform(RotationMatrix(), [1,0,2])
-    plant.SetFreeBodyPose(plant_context, body, pose)
+    throw_object(plant, plant_context, rng, obj)
 
-    
-    # Define the spatial velocity
-    spatial_velocity = SpatialVelocity(
-        v = np.array([1, 0, 0]),  # m/s
-        w = np.array([0, 0, 0]),  # rad/s
-    )
-    plant.SetFreeBodySpatialVelocity(context = plant_context, body = body, V_WB = spatial_velocity)
-
-    # Unlock joint so object is subject to gravity
-    joint.Unlock(plant_context)
-
-
-    # print(plant.GetBodyByName(obj))
 
 # Start simulation
 meshcat.StartRecording()
