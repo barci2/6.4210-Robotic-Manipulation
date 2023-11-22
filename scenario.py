@@ -26,6 +26,7 @@ OBJECTS = [
     ("tennis_ball", "Tennis_ball")
     ]
 
+# Custom object file paths
 tennis_ball_file = os.path.join(os.getcwd(), "object_files/Tennis_ball.sdf")
 
 # --------------------------------- DIRECTIVES ---------------------------------
@@ -125,14 +126,14 @@ def throw_object(plant, plant_context, rng, obj_name):
     angle_perturb = rng.uniform(0.1, 0.2) * rng.choice([-1, 1])  # must perturb by at least 0.1 rad to avoid throwing directly at iiwa
     # ensure the perturbation is applied such that it directs the obj away from iiwa
     if x*y > 0:  # x and y have same sign
-        cos = x / math.sqrt(x**2 + y**2) + angle_perturb
-        sin = y / math.sqrt(x**2 + y**2) - angle_perturb
+        cos_alpha = x / math.sqrt(x**2 + y**2) + angle_perturb
+        sin_alpha = y / math.sqrt(x**2 + y**2) - angle_perturb
     else:
-        cos = x / math.sqrt(x**2 + y**2) + angle_perturb
-        sin = y / math.sqrt(x**2 + y**2) + angle_perturb
+        cos_alpha = x / math.sqrt(x**2 + y**2) + angle_perturb
+        sin_alpha = y / math.sqrt(x**2 + y**2) + angle_perturb
     z_perturb = rng.uniform(-0.5, 0.5)
-    v_x = -v_magnitude * cos
-    v_y = -v_magnitude * sin 
+    v_x = -v_magnitude * cos_alpha
+    v_y = -v_magnitude * sin_alpha 
     v_z = 2 + z_perturb
 
     # Define the spatial velocity

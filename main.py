@@ -1,5 +1,4 @@
 from pydrake.all import (
-    AddMultibodyPlantSceneGraph,
     BsplineTrajectory,
     DiagramBuilder,
     Diagram,
@@ -20,12 +19,12 @@ from pydrake.geometry import StartMeshcat
 from pydrake.systems.analysis import Simulator
 from manipulation.station import MakeHardwareStation, load_scenario
 from manipulation.scenarios import AddRgbdSensors, AddShape
-from manipulation.utils import ConfigureParser
 from manipulation.meshcat_utils import AddMeshcatTriad
 
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+from enum import Enum
 
 from utils import diagram_update_meshcat, station_visualize_camera, diagram_visualize_connections
 from scenario import *
@@ -33,6 +32,13 @@ from scenario import *
 NUM_THROWS = 5
 
 rng = np.random.default_rng(135)  # Seeded randomness
+
+class PlannerState(Enum):
+    WAITING_FOR_OBJECT = 1
+    ESTIMATING_TRAJECTORY = 2
+    SELECTING_GRASP = 3
+    PLANNING_EXECUTING_TRAJECTORY = 4
+    RETURNING_HOME = 5
 
 
 # ------------------------------- MESHCAT SETUP -------------------------------
@@ -129,7 +135,7 @@ simulator_context = simulator.get_mutable_context()
 station_context = station.GetMyMutableContextFromRoot(simulator_context)
 plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
 
-# Freeze all objects for now (we'll unfreeze them when we're ready to throw them)
+# Throw objects
 for obj in obj_model_instance_names:
     model_instance = plant.GetModelInstanceByName(obj)  # ModelInstance object
     joint_idx = plant.GetJointIndices(model_instance)[0]  # JointIndex object
