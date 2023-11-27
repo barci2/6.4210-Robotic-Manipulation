@@ -3,11 +3,7 @@ from pydrake.all import (
     StartMeshcat,
     Simulator,
     ModelInstanceIndex,
-    RigidTransform,
-    PiecewisePolynomial,
-    MeshcatVisualizer,
-    MeshcatVisualizerParams,
-    Role
+    PiecewisePolynomial
 )
 # from pydrake.systems.analysis import Simulator
 from manipulation.meshcat_utils import WsgButton
@@ -23,7 +19,7 @@ from utils import (
     diagram_visualize_connections,
     throw_object,
 )
-from perception import add_cameras
+from perception import TrajectoryPredictor, add_cameras
 
 from motion_tests import motion_test  # TEMPORARY
 
@@ -55,9 +51,26 @@ station = builder.AddSystem(MakeHardwareStation(
     parser_preload_callback=lambda parser: parser.package_map().Add(this_drake_module_name, os.getcwd())
 ))
 
-##### Camera Setup #####
+### Object to throw
 plant = station.GetSubsystemByName("plant")
-add_cameras(builder, station, plant, 8, 4)
+(obj_name,) = [ # There should only be one uncommented object
+    model_name
+    for model_idx in range(plant.num_model_instances())
+    for model_name in [plant.GetModelInstanceName(ModelInstanceIndex(model_idx))]
+    if model_name.startswith('obj')
+]
+
+### Camera Setup
+cameras, camera_transforms = add_cameras(builder, station, plant, 800, 600, 8, 4, 5)
+
+### Perception Setup
+perception_system = builder.AddSystem(TrajectoryPredictor(cameras, camera_transforms, 0, obj_name, plant, meshcat))
+for i, camera in enumerate(cameras):
+    depth_input, label_input = perception_system.camera_input_ports(i)
+    builder.Connect(camera.depth_image_32F_output_port(), depth_input)
+    builder.Connect(camera.label_image_output_port(), label_input)
+
+### Finalizing diagram setup
 
 diagram = builder.Build()
 diagram.set_name("object_catching_system")
@@ -74,22 +87,12 @@ plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
 station.GetInputPort("iiwa.position").FixValue(station_context, np.zeros(7))
 station.GetInputPort("wsg.position").FixValue(station_context, [1])
 
-##### Extracting the object to throw #####
-(obj_name,) = [ # There should only be one uncommented object
-    model_name
-    for model_idx in range(plant.num_model_instances())
-    for model_name in [plant.GetModelInstanceName(ModelInstanceIndex(model_idx))]
-    if model_name.startswith('obj')
-]
-
 obj = plant.GetModelInstanceByName(obj_name)
 joint_idx = plant.GetJointIndices(obj)[0]  # JointIndex object
 joint = plant.get_joint(joint_idx)  # Joint object
 joint.Lock(plant_context)
 
 throw_object(plant, plant_context, obj_name)
-
-
 
 # Motion Planning Testing
 
@@ -108,10 +111,9 @@ test_obj_traj = PiecewisePolynomial.FirstOrderHold(
 # print(query_object.ComputeSignedDistanceToPoint([-2, 0, 0]))
 
 ##### Running Simulation & Meshcat #####
-simulator.AdvanceTo(0.2)
-# for i in range(8 * 4):
-#     visualize_camera_plt(diagram, f"camera{i}", simulator_context, False)
-# plt.show()
+simulator.set_target_realtime_rate(0.05)
+simulator.set_publish_every_time_step(True)
+plt.show()
 
 meshcat.StartRecording()
 simulator.AdvanceTo(simulator_runtime)
