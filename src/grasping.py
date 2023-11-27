@@ -11,7 +11,6 @@ from pydrake.all import (
     StartMeshcat,
     UniformlyRandomRotationMatrix,
 )
-
 import numpy as np
 
 
@@ -20,6 +19,7 @@ class GraspSelector(LeafSystem):
     Use method described in this paper: https://arxiv.org/pdf/1706.09911.pdf to
     sample potential grasps until finding one at a desirable position for iiwa.
     """
+
     def __init__(self, plant, bin_instance, camera_body_indices):
         """
         Args:
@@ -54,9 +54,7 @@ class GraspSelector(LeafSystem):
         self._crop_upper = np.maximum(a, b)
 
         self._internal_model = make_internal_model()
-        self._internal_model_context = (
-            self._internal_model.CreateDefaultContext()
-        )
+        self._internal_model_context = self._internal_model.CreateDefaultContext()
         self._rng = np.random.default_rng()
         self._camera_body_indices = camera_body_indices
 
