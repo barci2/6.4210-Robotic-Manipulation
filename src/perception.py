@@ -61,8 +61,8 @@ class TrajectoryPredictor(LeafSystem):
     """
 
     def __init__(self):
-        pass
-        
+        LeafSystem.__init__(self)
+
         # Note: Trajectory is a parent class for a lot of different types of
         # trajectories; whichever one you use is fine, as long as Trajectory.value(t)
         # returns the correct pose of the object.
