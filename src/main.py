@@ -39,7 +39,7 @@ meshcat.AddButton(close_button_str)
 builder = DiagramBuilder()
 scenario = load_scenario(filename=scenario_file)
 
-### Hardware station setup
+##### Hardware station setup #####
 station = builder.AddSystem(MakeHardwareStation(
     scenario=scenario,
     meshcat=meshcat,
@@ -49,7 +49,7 @@ station = builder.AddSystem(MakeHardwareStation(
     parser_preload_callback=lambda parser: parser.package_map().Add(this_drake_module_name, os.getcwd())
 ))
 
-### Camera Setup
+##### Camera Setup #####
 plant = station.GetSubsystemByName("plant")
 add_cameras(builder, station, plant, 8, 4)
 

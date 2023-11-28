@@ -28,10 +28,10 @@ meshcat = StartMeshcat()
 
 
 # Basic setup
-pcd = MustardPointCloud(normals=True, down_sample=False)
+obj_pc = MustardPointCloud(normals=True, down_sample=False)
 
 meshcat.SetProperty("/Background", "visible", False)
-meshcat.SetObject("cloud", pcd, point_size=0.001)
+meshcat.SetObject("cloud", obj_pc, point_size=0.001)
 
 
 def setup_grasp_diagram(draw_frames=True):
@@ -81,7 +81,7 @@ def draw_grasp_candidate(
     context = diagram.CreateDefaultContext()
     diagram.ForcedPublish(context)
 
-def compute_sdf(pcd, X_G, visualize=False):
+def compute_sdf(obj_pc, X_G, visualize=False):
     """
     TODO: Speed up this function.
 
@@ -100,31 +100,31 @@ def compute_sdf(pcd, X_G, visualize=False):
         scene_graph_context
     )
 
-    pcd_sdf = np.inf
-    for pt in pcd.xyzs().T:
+    obj_pc_sdf = np.inf
+    for pt in obj_pc.xyzs().T:
         distances = query_object.ComputeSignedDistanceToPoint(pt)
         for body_index in range(len(distances)):
             distance = distances[body_index].distance
-            if distance < pcd_sdf:
-                pcd_sdf = distance
+            if distance < obj_pc_sdf:
+                obj_pc_sdf = distance
 
-    return pcd_sdf
+    return obj_pc_sdf
 
 
-def compute_darboux_frame(index, pcd, kdtree, ball_radius=0.002, max_nn=50):
+def compute_darboux_frame(index, obj_pc, kdtree, ball_radius=0.002, max_nn=50):
     """
     Given a index of the pointcloud, return a RigidTransform from world to the
     Darboux frame at that point.
     Args:
     - index (int): index of the pointcloud.
-    - pcd (PointCloud object): pointcloud of the object.
+    - obj_pc (PointCloud object): pointcloud of the object.
     - kdtree (scipy.spatial.KDTree object): kd tree to use for nn search.
     - ball_radius (float): ball_radius used for nearest-neighbors search
     - max_nn (int): maximum number of points considered in nearest-neighbors search.
     """
-    points = pcd.xyzs()  # 3xN np array of points
-    normals = pcd.normals()  # 3xN np array of normals
-    pcd_size = pcd.size()
+    points = obj_pc.xyzs()  # 3xN np array of points
+    normals = obj_pc.normals()  # 3xN np array of normals
+    obj_pc_size = obj_pc.size()
 
     # AddMeshcatTriad(meshcat, "goal pose", X_PT=RigidTransform(RotationMatrix.Identity(), points[:,index]), opacity=0.5)
 
@@ -166,16 +166,16 @@ def compute_darboux_frame(index, pcd, kdtree, ball_radius=0.002, max_nn=50):
 
 
 
-def check_nonempty(pcd, X_WG, visualize=False):
+def check_nonempty(obj_pc, X_WG, visualize=False):
     """
     Check if the "closing region" of the gripper is nonempty by transforming the pointclouds to gripper coordinates.
     Args:
-      - pcd (PointCloud object): pointcloud of the object.
+      - obj_pc (PointCloud object): pointcloud of the object.
       - X_WG (Drake RigidTransform): transform of the gripper.
     Return:
       - is_nonempty (boolean): boolean set to True if there is a point within the cropped region.
     """
-    pcd_W_np = pcd.xyzs()
+    obj_pc_W_np = obj_pc.xyzs()
 
     # Bounding box of the closing region written in the coordinate frame of the gripper body.
     # Do not modify
@@ -184,17 +184,17 @@ def check_nonempty(pcd, X_WG, visualize=False):
 
     # Transform the pointcloud to gripper frame.
     X_GW = X_WG.inverse()
-    pcd_G_np = X_GW.multiply(pcd_W_np)
+    obj_pc_G_np = X_GW.multiply(obj_pc_W_np)
 
     # Check if there are any points within the cropped region.
     indices = np.all(
         (
-            crop_min[0] <= pcd_G_np[0, :],
-            pcd_G_np[0, :] <= crop_max[0],
-            crop_min[1] <= pcd_G_np[1, :],
-            pcd_G_np[1, :] <= crop_max[1],
-            crop_min[2] <= pcd_G_np[2, :],
-            pcd_G_np[2, :] <= crop_max[2],
+            crop_min[0] <= obj_pc_G_np[0, :],
+            obj_pc_G_np[0, :] <= crop_max[0],
+            crop_min[1] <= obj_pc_G_np[1, :],
+            obj_pc_G_np[1, :] <= crop_max[1],
+            crop_min[2] <= obj_pc_G_np[2, :],
+            obj_pc_G_np[2, :] <= crop_max[2],
         ),
         axis=0,
     )
@@ -203,11 +203,11 @@ def check_nonempty(pcd, X_WG, visualize=False):
 
     if visualize:
         meshcat.Delete()
-        pcd_G = PointCloud(pcd)
-        pcd_G.mutable_xyzs()[:] = pcd_G_np
+        obj_pc_G = PointCloud(obj_pc)
+        obj_pc_G.mutable_xyzs()[:] = obj_pc_G_np
 
         draw_grasp_candidate(RigidTransform())
-        meshcat.SetObject("cloud", pcd_G)
+        meshcat.SetObject("cloud", obj_pc_G)
 
         box_length = np.array(crop_max) - np.array(crop_min)
         box_center = (np.array(crop_max) + np.array(crop_min)) / 2.0
@@ -222,11 +222,11 @@ def check_nonempty(pcd, X_WG, visualize=False):
 
 
 
-def compute_candidate_grasps(pcd, candidate_num=10, random_seed=5):
+def compute_candidate_grasps(obj_pc, candidate_num=10, random_seed=5):
     """
     Compute candidate grasps.
     Args:
-        - pcd (PointCloud object): pointcloud of the object.
+        - obj_pc (PointCloud object): pointcloud of the object.
         - candidate_num (int) : number of desired candidates.
         - random_seed (int) : seed for rng, used for grading.
     Return:
@@ -241,14 +241,13 @@ def compute_candidate_grasps(pcd, candidate_num=10, random_seed=5):
     # np.random.seed(random_seed)
 
     # Build KD tree for the pointcloud.
-    kdtree = KDTree(pcd.xyzs().T)
+    kdtree = KDTree(obj_pc.xyzs().T)
     ball_radius = 0.002
 
-    candidate_count = 0
     candidate_lst = []  # list of candidates, given by RigidTransforms.
 
-    def compute_candidate(idx, pcd, kdtree, ball_radius, x_min, x_max, phi_min, phi_max, candidate_lst_lock, candidate_lst):
-        X_WF = compute_darboux_frame(idx, pcd, kdtree, ball_radius)  # find Darboux frame of random point
+    def compute_candidate(idx, obj_pc, kdtree, ball_radius, x_min, x_max, phi_min, phi_max, candidate_lst_lock, candidate_lst):
+        X_WF = compute_darboux_frame(idx, obj_pc, kdtree, ball_radius)  # find Darboux frame of random point
 
         # Compute random x-translation and z-rotation to modify gripper pose
         # random_x = np.random.uniform(x_min, x_max)
@@ -258,7 +257,7 @@ def compute_candidate_grasps(pcd, candidate_num=10, random_seed=5):
         new_X_WG = X_WF @ RigidTransform(np.array([0, -0.05, 0]))  # Move grasper back by fixed amount
 
         # compute_sdf takes most of the runtime
-        if (compute_sdf(pcd, new_X_WG) > 0.001) and check_nonempty(pcd, new_X_WG):  # no collision, and there is an object between fingers
+        if (compute_sdf(obj_pc, new_X_WG) > 0.001) and check_nonempty(obj_pc, new_X_WG):  # no collision, and there is an object between fingers
             with candidate_lst_lock:
                 candidate_lst.append(new_X_WG)
 
@@ -267,8 +266,8 @@ def compute_candidate_grasps(pcd, candidate_num=10, random_seed=5):
     threads = []
     candidate_lst_lock = threading.Lock()
     for i in range(candidate_num):
-        random_idx = np.random.randint(0, pcd.size())
-        t = threading.Thread(target=compute_candidate, args=(random_idx, pcd, kdtree, ball_radius, x_min, x_max, phi_min, phi_max, candidate_lst_lock, candidate_lst))
+        random_idx = np.random.randint(0, obj_pc.size())
+        t = threading.Thread(target=compute_candidate, args=(random_idx, obj_pc, kdtree, ball_radius, x_min, x_max, phi_min, phi_max, candidate_lst_lock, candidate_lst))
         threads.append(t)
         t.start()
 
@@ -278,21 +277,20 @@ def compute_candidate_grasps(pcd, candidate_num=10, random_seed=5):
     return candidate_lst
 
 
+obj_pc_downsampled = obj_pc.VoxelizedDownSample(voxel_size=0.0075)
 
-pcd_downsampled = pcd.VoxelizedDownSample(voxel_size=0.0075)
-
-pcd_centroid = np.mean(pcd.xyzs(), axis=1)  # column-wise mean of 3xN np array of points
-print(pcd_centroid)
+obj_pc_centroid = np.mean(obj_pc.xyzs(), axis=1)  # column-wise mean of 3xN np array of points
+print(obj_pc_centroid)
 
 start = time.time()
 grasp_candidates = compute_candidate_grasps(
-    pcd_downsampled, candidate_num=20, random_seed=12
+    obj_pc_downsampled, candidate_num=20, random_seed=12
 )
 print(time.time() - start)
 print(f"grasp_candidates: {grasp_candidates}")
 
 meshcat.Delete()
-meshcat.SetObject("cloud", pcd_downsampled)
+meshcat.SetObject("cloud", obj_pc_downsampled)
 
 """
 Iterate through all grasps and select the best based on the following heuristic:
@@ -300,21 +298,21 @@ Minimum distance between the centroid of the object and the y-axis ray of X_WG.
 
 This ensures the gripper doesn't try to grab an edge of the object.
 """
-min_distance_pcd_centroid_to_y_axis_ray = float('inf')
+min_distance_obj_pc_centroid_to_y_axis_ray = float('inf')
 min_distance_grasp = None
 for i in range(len(grasp_candidates)):
-    pcd_centroid_relative_to_X_WG = pcd_centroid - grasp_candidates[i].translation()
+    obj_pc_centroid_relative_to_X_WG = obj_pc_centroid - grasp_candidates[i].translation()
     X_WG_y_axis_vector = grasp_candidates[i].rotation().matrix()[:, 1]
-    projection_pcd_centroid_relative_to_X_WG_onto_X_WG_y_axis_vector = (np.dot(pcd_centroid_relative_to_X_WG, X_WG_y_axis_vector) / np.linalg.norm(X_WG_y_axis_vector)) * X_WG_y_axis_vector  # Equation for projection of one vector onto another
-    distance_pcd_centroid_to_X_WG_y_axis = np.linalg.norm(pcd_centroid_relative_to_X_WG - projection_pcd_centroid_relative_to_X_WG_onto_X_WG_y_axis_vector)
+    projection_obj_pc_centroid_relative_to_X_WG_onto_X_WG_y_axis_vector = (np.dot(obj_pc_centroid_relative_to_X_WG, X_WG_y_axis_vector) / np.linalg.norm(X_WG_y_axis_vector)) * X_WG_y_axis_vector  # Equation for projection of one vector onto another
+    distance_obj_pc_centroid_to_X_WG_y_axis = np.linalg.norm(obj_pc_centroid_relative_to_X_WG - projection_obj_pc_centroid_relative_to_X_WG_onto_X_WG_y_axis_vector)
 
-    if distance_pcd_centroid_to_X_WG_y_axis < min_distance_pcd_centroid_to_y_axis_ray:
-        min_distance_pcd_centroid_to_y_axis_ray = distance_pcd_centroid_to_X_WG_y_axis
+    if distance_obj_pc_centroid_to_X_WG_y_axis < min_distance_obj_pc_centroid_to_y_axis_ray:
+        min_distance_obj_pc_centroid_to_y_axis_ray = distance_obj_pc_centroid_to_X_WG_y_axis
         min_distance_grasp = grasp_candidates[i]
 
     print(f"y_vector: {X_WG_y_axis_vector}")
 
-
+    # draw all grasp candidates
     # draw_grasp_candidate(
     #     grasp_candidates[i], prefix="gripper" + str(i), draw_frames=False
     # )

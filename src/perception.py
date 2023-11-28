@@ -5,6 +5,9 @@ Output ports:
 """
 
 from pydrake.all import (
+    AbstractValue,
+    Trajectory,
+    PointCloud,
     DiagramBuilder,
     RgbdSensor,
     MultibodyPlant,
@@ -53,8 +56,39 @@ def add_cameras(builder: DiagramBuilder, station: Diagram, plant: MultibodyPlant
 
 
 class TrajectoryPredictor(LeafSystem):
-    """ Performs ICP after first keying out the objects
+    """ 
+    Performs ICP after first keying out the objects
     """
 
     def __init__(self):
         pass
+        
+        # Note: Trajectory is a parent class for a lot of different types of
+        # trajectories; whichever one you use is fine, as long as Trajectory.value(t)
+        # returns the correct pose of the object.
+        port = self.DeclareAbstractOutputPort(
+            "object_trajectory",
+            lambda: AbstractValue.Make((Trajectory())),
+            self.EstimateTrajectory,
+        )
+
+        port = self.DeclareAbstractOutputPort(
+            "object_pc",
+            lambda: AbstractValue.Make((PointCloud())),
+            self.CreateDownsampledPC,
+        )
+
+    def EstimateTrajectory(self, context, output):
+        """
+        Estimates ballistic trajectory of flying object and returns results in
+        a Trajectory object.
+        """
+        pass
+
+    def CreateDownsampledPC(self, context, output):
+        """
+        Based on the output of the RGBD cameras, creates a downsampled PC object
+        that the grasp-selector can use to genrate candidate grasps.
+        """
+        pass
+    

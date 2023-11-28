@@ -1,6 +1,7 @@
 from pydrake.all import (
     AbstractValue,
     Concatenate,
+    Trajectory,
     InputPortIndex,
     LeafSystem,
     PointCloud,
@@ -20,43 +21,26 @@ class GraspSelector(LeafSystem):
     sample potential grasps until finding one at a desirable position for iiwa.
     """
 
-    def __init__(self, plant, bin_instance, camera_body_indices):
+    def __init__(self):
         """
         Args:
             xx
         """
         LeafSystem.__init__(self)
-        model_point_cloud = AbstractValue.Make(PointCloud(0))
-        self.DeclareAbstractInputPort("cloud0_W", model_point_cloud)
-        self.DeclareAbstractInputPort("cloud1_W", model_point_cloud)
-        self.DeclareAbstractInputPort("cloud2_W", model_point_cloud)
-        self.DeclareAbstractInputPort(
-            "body_poses", AbstractValue.Make([RigidTransform()])
-        )
-
+        obj_pc = AbstractValue.Make(PointCloud(0))
+        obj_traj = AbstractValue.Make(Trajectory())
+        self.DeclareAbstractInputPort("object_pc", obj_pc)
+        self.DeclareAbstractInputPort("object_trajectory", obj_traj)
+        
         port = self.DeclareAbstractOutputPort(
             "grasp_selection",
-            lambda: AbstractValue.Make((np.inf, RigidTransform())),
+            lambda: AbstractValue.Make([RigidTransform()]),  # list of good candidate grasps
             self.SelectGrasp,
         )
         port.disable_caching_by_default()
 
-        # Compute crop box.
-        context = plant.CreateDefaultContext()
-        bin_body = plant.GetBodyByName("bin_base", bin_instance)
-        X_B = plant.EvalBodyPoseInWorld(context, bin_body)
-        margin = 0.001  # only because simulation is perfect!
-        a = X_B.multiply(
-            [-0.22 + 0.025 + margin, -0.29 + 0.025 + margin, 0.015 + margin]
-        )
-        b = X_B.multiply([0.22 - 0.1 - margin, 0.29 - 0.025 - margin, 2.0])
-        self._crop_lower = np.minimum(a, b)
-        self._crop_upper = np.maximum(a, b)
-
-        self._internal_model = make_internal_model()
-        self._internal_model_context = self._internal_model.CreateDefaultContext()
         self._rng = np.random.default_rng()
-        self._camera_body_indices = camera_body_indices
+
 
     def SelectGrasp(self, context, output):
         body_poses = self.get_input_port(3).Eval(context)
