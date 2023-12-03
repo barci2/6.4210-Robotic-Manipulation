@@ -20,9 +20,10 @@ from pydrake.all import (
 )
 import numpy as np
 import itertools
+from typing import List
 
 
-def add_cameras(builder: DiagramBuilder, station: Diagram, plant: MultibodyPlant, h_num: int, v_num: int) -> list[Diagram]:
+def add_cameras(builder: DiagramBuilder, station: Diagram, plant: MultibodyPlant, h_num: int, v_num: int) -> List[Diagram]:
     camera_config = CameraConfig()
     scene_graph = station.GetSubsystemByName("scene_graph")
     if not scene_graph.HasRenderer(camera_config.renderer_name):
@@ -63,9 +64,14 @@ class TrajectoryPredictor(LeafSystem):
     def __init__(self):
         LeafSystem.__init__(self)
 
-        # Note: Trajectory is a parent class for a lot of different types of
+        # As we previously discussed, the perception system outputs a Trajectory
+        # object.
+        # Trajectory is a parent class for a lot of different types of
         # trajectories; whichever one you use is fine, as long as Trajectory.value(t)
-        # returns the correct pose of the object.
+        # returns a (7,1) numpy array, containing X,Y,Z,q1,q2,q3,q4 in world frame.
+        # If this confusing or if we want to change the output of the perception system
+        # to something else, please DM Michael since his part of the project is currently 
+        # working under these assumptions described here.
         port = self.DeclareAbstractOutputPort(
             "object_trajectory",
             lambda: AbstractValue.Make((Trajectory())),

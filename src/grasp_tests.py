@@ -27,9 +27,8 @@ from scipy.spatial import KDTree
 meshcat = StartMeshcat()
 
 
-# Basic setup
+# Temporary setup
 obj_pc = MustardPointCloud(normals=True, down_sample=False)
-
 meshcat.SetProperty("/Background", "visible", False)
 meshcat.SetObject("cloud", obj_pc, point_size=0.001)
 

@@ -9,15 +9,23 @@ Agenda:
 ## Installations
 See https://drake.mit.edu/installation.html
 
-Our recommended setup requires using a Linux machine, or using WSL on Windows, with the following requirements:
+Our recommended setup requires using a Linux machine, or using WSL2 on Windows, with the following requirements:
 - `python` 3.8 or higher
 - `pip` 20.3 or higher
 - `pip install manipulation --upgrade --extra-index-url https://drake-packages.csail.mit.edu/whl/nightly/`
 
+If you are running WSL2 on Windows, ensure you install the following to enable the graphics libraries to work:
+ - `sudo apt install mesa-utils`
+ - Install 
+ - Install XcXsrv software on your Windows Machine: https://sourceforge.net/projects/vcxsrv/files/latest/download
+ - Before running this code, start an instance of XcXsrv (by starting the XLaunch application). Leave all settings in XLaunch at the default, except, *disable Access Control*. You should only need to do this once (unless you kill XcXsrv or restart your machine).
+ - Every time you open a new WSL terminal, you must run `export DISPLAY=<IP ADDRESS>:0.0`, where you can find `<IP ADDRESS>` by running `ipconfig` in a command prompt (and use the IPv4 address under WSL)
+ - Test that the display forwarding is working by runing `glxgears` in your WSL terminal. You should see a new window appear with an animation of spinning gears.
+ - If you ever run src/main.py, but see nothing happen in the meshcat Window (but also receive no error message), you likely do not have an instance of XcXsrv running.
 
 ## Running
-```python
-python3 main.py
+```
+python3 src/smain.py
 ```
 
 ## Discussion of Architecture

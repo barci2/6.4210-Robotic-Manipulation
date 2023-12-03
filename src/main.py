@@ -4,13 +4,18 @@ from pydrake.all import (
     DiagramBuilder,
     StartMeshcat,
     Simulator,
-    ModelInstanceIndex
+    ModelInstanceIndex,
+    RigidTransform,
+    PiecewisePolynomial,
+    MeshcatVisualizer,
+    MeshcatVisualizerParams,
+    Role
 )
 # from pydrake.systems.analysis import Simulator
 from manipulation.meshcat_utils import WsgButton
 from manipulation.station import MakeHardwareStation, load_scenario
 from manipulation.scenarios import AddRgbdSensors, AddShape
-from manipulation.meshcat_utils import AddMeshcatTriad
+from manipulation.meshcat_utils import AddMeshcatTriad, PublishPositionTrajectory
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -20,6 +25,8 @@ from utils import (
     throw_object,
 )
 from perception import add_cameras
+
+from motion_tests import motion_test  # TEMPORARY
 
 ##### Settings #####
 seed = 135
@@ -83,6 +90,18 @@ joint.Lock(plant_context)
 
 ##### Throwing the object #####
 throw_object(plant, plant_context, obj_name)
+
+
+# Motion Planning Testing
+
+# linear path for testing
+t = plant_context.get_time()
+test_obj_traj = PiecewisePolynomial.FirstOrderHold(
+            [t, t + 1],  # Time knots
+            np.array([[-1, 1], [-1, 0], [1, 1], [0, 0], [0, 0], [0, 0], [1, 1]])
+            )
+
+# motion_test(meshcat, test_obj_traj, 1)
 
 # scene_graph = station.GetSubsystemByName("scene_graph")
 # scene_graph_context = scene_graph.GetMyMutableContextFromRoot(simulator_context)

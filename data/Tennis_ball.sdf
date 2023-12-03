@@ -31,23 +31,10 @@
             <scale>0.0336683417 0.0336683417 0.0336683417</scale>
           </mesh>
         </geometry>
-        <surface>
-          <friction>
-            <ode>
-              <mu>0</mu>
-              <mu2>0</mu2>
-            </ode>
-          </friction>
-          <bounce>
-              <restitution_coefficient> 1. </restitution_coefficient>
-              <threshold>.0.</threshold>
-          </bounce>
-        </surface>
         <drake:proximity_properties>
           <drake:mu_dynamic>0.5</drake:mu_dynamic>
           <drake:mu_static>0.5</drake:mu_static>
           <drake:rigid_hydroelastic/>
-          <drake:hydroelastic_modulus>1.0e100</drake:hydroelastic_modulus>
         </drake:proximity_properties>  
       </collision>
     </link>
