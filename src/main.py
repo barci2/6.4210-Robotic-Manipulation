@@ -1,9 +1,12 @@
 from pydrake.all import (
     DiagramBuilder,
     StartMeshcat,
+    MeshcatVisualizer,
+    MeshcatVisualizerParams,
     Simulator,
     ModelInstanceIndex,
-    PiecewisePolynomial
+    PiecewisePolynomial,
+    TrajectorySource
 )
 # from pydrake.systems.analysis import Simulator
 from manipulation.meshcat_utils import WsgButton
@@ -21,6 +24,7 @@ from utils import (
 )
 from perception import TrajectoryPredictor, add_cameras
 
+from grasping_selection import GraspSelector
 from motion_tests import motion_test  # TEMPORARY
 
 ##### Settings #####
@@ -29,7 +33,7 @@ close_button_str = "Close"
 scenario_file = "data/scenario.yaml"
 thrown_obj_prefix = "obj"
 this_drake_module_name = "cwd"
-simulator_runtime = 5
+simulator_runtime = 3
 
 np.random.seed(seed)
 
@@ -50,6 +54,7 @@ station = builder.AddSystem(MakeHardwareStation(
     # we can refer to this using the "package://" URI directive
     parser_preload_callback=lambda parser: parser.package_map().Add(this_drake_module_name, os.getcwd())
 ))
+scene_graph = station.GetSubsystemByName("scene_graph")
 
 ### Object to throw
 plant = station.GetSubsystemByName("plant")
@@ -70,21 +75,39 @@ for i, camera in enumerate(cameras):
     builder.Connect(camera.depth_image_32F_output_port(), depth_input)
     builder.Connect(camera.label_image_output_port(), label_input)
 
+### Grasp Selector
+# grasp_selector = builder.AddSystem(GraspSelector(plant, scene_graph, diagram, context, meshcat))
+# builder.Connect(perception_system.GetOutputPort("object_trajectory"), grasp_selector.GetInputPort("object_trajectory"))
+
+### Motion Planning
+# linear path for testing
+t = 0
+test_obj_traj = PiecewisePolynomial.FirstOrderHold(
+            [t, t + 1],  # Time knots
+            np.array([[-1, 0.55], [-1, 0], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
+            )
+
+q_traj = motion_test(plant, meshcat, test_obj_traj, 1)
+
+# Connect output of motion system to input of iiwa's controller
+q_traj_system = builder.AddSystem(TrajectorySource(q_traj))
+builder.Connect(
+    q_traj_system.get_output_port(), station.GetInputPort("iiwa.position")
+)
+
 ### Finalizing diagram setup
-
 diagram = builder.Build()
+context = diagram.CreateDefaultContext()
 diagram.set_name("object_catching_system")
-
 diagram_visualize_connections(diagram, "diagram.svg")
 
 ##### Simulation Setup #####
 simulator = Simulator(diagram)
-# simulator.set_target_realtime_rate(1.0)
 simulator_context = simulator.get_mutable_context()
 station_context = station.GetMyMutableContextFromRoot(simulator_context)
 plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
 
-station.GetInputPort("iiwa.position").FixValue(station_context, np.zeros(7))
+# station.GetInputPort("iiwa.position").FixValue(station_context, np.zeros(7))
 station.GetInputPort("wsg.position").FixValue(station_context, [1])
 
 obj = plant.GetModelInstanceByName(obj_name)
@@ -94,24 +117,14 @@ joint.Lock(plant_context)
 
 throw_object(plant, plant_context, obj_name)
 
-# Motion Planning Testing
-
-# linear path for testing
-t = plant_context.get_time()
-test_obj_traj = PiecewisePolynomial.FirstOrderHold(
-            [t, t + 1],  # Time knots
-            np.array([[-1, 0.75], [-1, 0], [0.75, 0.75], [0, 0], [0, 0], [0, 0], [1, 1]])
-            )
-
-# motion_test(meshcat, test_obj_traj, 1)
-
-# scene_graph = station.GetSubsystemByName("scene_graph")
 # scene_graph_context = scene_graph.GetMyMutableContextFromRoot(simulator_context)
 # query_object = scene_graph.get_query_output_port().Eval(scene_graph_context)
 # print(query_object.ComputeSignedDistanceToPoint([-2, 0, 0]))
 
 ##### Running Simulation & Meshcat #####
-simulator.set_target_realtime_rate(0.05)
+# simulator.AdvanceTo(0.2)
+
+simulator.set_target_realtime_rate(1.0)
 simulator.set_publish_every_time_step(True)
 plt.show()
 

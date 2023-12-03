@@ -26,7 +26,8 @@ from pydrake.all import (
     PointCloud,
     OutputPort,
     Rgba,
-    Meshcat
+    Meshcat,
+    PiecewisePolynomial
 )
 import numpy as np
 import numpy.typing as npt
@@ -126,12 +127,14 @@ class TrajectoryPredictor(LeafSystem):
         self._poses_state_index = self.DeclareAbstractState(AbstractValue.Make([0.0, 0.0, 0.0]))
 
         # Update Event
-        self.DeclarePeriodicPublishEvent(0.001, 0.001, self.PredictTrajectory)
+        self.DeclarePeriodicPublishEvent(0.1, 0.001, self.PredictTrajectory)
 
+        # Michael commented out `lambda c, o: None` and added `self.CreateOutput`
         port = self.DeclareAbstractOutputPort(
             "object_trajectory",
             lambda: AbstractValue.Make((Trajectory())),
-            lambda c, o: None,
+            # lambda c, o: None,
+            self.CreateOutput,
         )
 
     def camera_input_ports(self, camera_idx: int) -> Tuple[InputPort, InputPort]:
@@ -177,3 +180,11 @@ class TrajectoryPredictor(LeafSystem):
         y = (v - center_y) * z / focal_y
         pC = np.stack([x, y, z])
         return (transform @ pC)
+
+    # Michael added this function to test connecting the two leafsystems
+    def CreateOutput(self, context, output):
+        t = 0
+        test_obj_traj = PiecewisePolynomial.FirstOrderHold(
+                    [t, t + 1],  # Time knots
+                    np.array([[-1, 0.65], [-1, 0], [0.75, 0.75], [0, 0], [0, 0], [0, 0], [1, 1]])
+                    )

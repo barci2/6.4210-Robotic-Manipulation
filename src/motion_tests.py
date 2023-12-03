@@ -18,12 +18,14 @@ from pydrake.all import (
     MinimumDistanceLowerBoundConstraint,
     Parser,
     PositionConstraint,
+    OrientationConstraint,
     SpatialVelocityConstraint,
     RigidTransform,
     Solve,
     Sphere,
     Rgba,
     Quaternion,
+    RotationMatrix,
     MeshcatVisualizer,
     MeshcatVisualizerParams,
 )
@@ -32,7 +34,96 @@ from manipulation.meshcat_utils import PublishPositionTrajectory, AddMeshcatTria
 from manipulation.scenarios import AddIiwa, AddPlanarIiwa, AddShape, AddWsg
 from manipulation.utils import ConfigureParser
 
-def motion_test(meshcat, obj_traj, obj_catch_t):
+def add_constraints(plant, 
+                    plant_context, 
+                    plant_auto_diff, 
+                    trajopt, 
+                    prog, 
+                    world_frame, 
+                    gripper_frame, 
+                    X_WStart, 
+                    X_WGoal, 
+                    num_q, 
+                    q0, 
+                    obj_traj, 
+                    obj_catch_t,
+                    acceptable_pos_err=0.0,
+                    theta_bound = 0.2,
+                    acceptable_vel_err=0.5):
+    """
+    Relevant Constraints who have tunable acceptable error measurements.
+    """
+    trajopt.AddDurationConstraint(0.5, 50)
+
+    # start constraint
+    start_constraint = PositionConstraint(
+        plant,
+        world_frame,
+        X_WStart.translation(),  # upper limit
+        X_WStart.translation(),  # lower limit
+        gripper_frame,
+        [0, 0.1, 0],
+        plant_context,
+    )
+    trajopt.AddPathPositionConstraint(start_constraint, 0)
+    prog.AddQuadraticErrorCost(
+        np.eye(num_q), q0, trajopt.control_points()[:, 0]
+    )
+
+    # goal constraint
+    goal_pos_constraint = PositionConstraint(
+        plant,
+        world_frame,
+        X_WGoal.translation() - acceptable_pos_err,  # upper limit
+        X_WGoal.translation() + acceptable_pos_err,  # lower limit
+        gripper_frame,
+        [0, 0.1, 0],
+        plant_context,
+    )
+    goal_orientation_constraint = OrientationConstraint(
+        plant,
+        world_frame,
+        X_WGoal.rotation(),  # orientation of gripper in world frame ...
+        gripper_frame,
+        RotationMatrix(),  # ... must equal origin in gripper frame
+        theta_bound,
+        plant_context
+    )
+    trajopt.AddPathPositionConstraint(goal_pos_constraint, 1)
+    trajopt.AddPathPositionConstraint(goal_orientation_constraint, 1)
+    prog.AddQuadraticErrorCost(
+        np.eye(num_q), q0, trajopt.control_points()[:, -1]
+    )
+
+    # start with zero velocity
+    trajopt.AddPathVelocityConstraint(
+        np.zeros((num_q, 1)), np.zeros((num_q, 1)), 0
+    )
+    # end with velocity equal to object's velocity at that moment
+    obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,) np array
+    final_vel_constraint = SpatialVelocityConstraint(
+        plant_auto_diff,
+        plant_auto_diff.world_frame(),
+        obj_vel_at_catch - acceptable_vel_err,  # upper limit
+        obj_vel_at_catch + acceptable_vel_err,  # lower limit
+        plant_auto_diff.GetFrameByName("iiwa_link_7"),
+        np.array([0, 0, 0]).reshape(-1,1),
+        plant_auto_diff.CreateDefaultContext(),
+    )
+    trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
+
+    # collision constraints
+    # collision_constraint = MinimumDistanceLowerBoundConstraint(
+    #     plant, 0.001, plant_context, None, 0.01
+    # )
+    # evaluate_at_s = np.linspace(0, 1, 50)
+    # for s in evaluate_at_s:
+    #     trajopt.AddPathPositionConstraint(collision_constraint, s)
+
+
+def motion_test(original_plant, meshcat, obj_traj, obj_catch_t):
+    original_plant_positions = original_plant.GetPositions(original_plant.CreateDefaultContext(), original_plant.GetModelInstanceByName("iiwa"))
+
     # Setup a new MBP with just the iiwa which the KinematicTrajectoryOptimization will use
     builder = DiagramBuilder()
     plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
@@ -49,6 +140,12 @@ def motion_test(meshcat, obj_traj, obj_catch_t):
     plant.Finalize()
     plant_context = plant.CreateDefaultContext()
 
+    # Set positions of this new plant equal to the positions of the main plant
+    plant.SetPositions(plant_context, iiwa, original_plant_positions)
+
+    # Create auto-differentiable version the plant in order to set velocity constraints
+    plant_auto_diff = plant.ToAutoDiffXd()
+
     # Plot spheres to visualize obj trajectory
     times = np.linspace(0, 1, 50)
     for t in times:
@@ -64,8 +161,8 @@ def motion_test(meshcat, obj_traj, obj_catch_t):
     obj_catch_quaterion = obj_catch_point[3:]
     obj_catch_position = obj_catch_point[:3]
     X_WGoal = RigidTransform(Quaternion(obj_catch_quaterion), obj_catch_position)
-    print(f"X_WStart: {X_WStart}")
-    print(f"X_WGoal: {X_WGoal}")
+    # print(f"X_WStart: {X_WStart}")
+    # print(f"X_WGoal: {X_WGoal}")
 
     AddMeshcatTriad(meshcat, "start", X_PT=X_WStart, opacity=0.5)
     meshcat.SetTransform("start", X_WStart)
@@ -84,14 +181,28 @@ def motion_test(meshcat, obj_traj, obj_catch_t):
     path_guess = BsplineTrajectory(trajopt.basis(), q_guess)
     trajopt.SetInitialGuess(path_guess)
 
-    trajopt.AddDurationCost(1.0)
-    trajopt.AddPathLengthCost(1.0)
+    trajopt.AddDurationCost(5.0)  # increase to make iiwa faster
+    # trajopt.AddPathLengthCost(1.0)
     trajopt.AddPositionBounds(
         plant.GetPositionLowerLimits(), plant.GetPositionUpperLimits()
     )
     trajopt.AddVelocityBounds(
         plant.GetVelocityLowerLimits(), plant.GetVelocityUpperLimits()
     )
+
+    # add_constraints(plant, 
+    #                 plant_context, 
+    #                 plant_auto_diff, 
+    #                 trajopt, 
+    #                 prog, 
+    #                 world_frame, 
+    #                 gripper_frame, 
+    #                 X_WStart, 
+    #                 X_WGoal, 
+    #                 num_q, 
+    #                 q0, 
+    #                 obj_traj, 
+    #                 obj_catch_t)
 
     trajopt.AddDurationConstraint(0.5, 50)
 
@@ -111,7 +222,7 @@ def motion_test(meshcat, obj_traj, obj_catch_t):
     )
 
     # goal constraint
-    goal_constraint = PositionConstraint(
+    goal_pos_constraint = PositionConstraint(
         plant,
         world_frame,
         X_WGoal.translation(),  # upper limit
@@ -120,7 +231,17 @@ def motion_test(meshcat, obj_traj, obj_catch_t):
         [0, 0.1, 0],
         plant_context,
     )
-    trajopt.AddPathPositionConstraint(goal_constraint, 1)
+    goal_orientation_constraint = OrientationConstraint(
+        plant,
+        world_frame,
+        X_WGoal.rotation(),  # orientation of gripper in world frame ...
+        gripper_frame,
+        RotationMatrix(),  # ... must equal origin in gripper frame
+        0.2,
+        plant_context
+    )
+    trajopt.AddPathPositionConstraint(goal_pos_constraint, 1)
+    trajopt.AddPathPositionConstraint(goal_orientation_constraint, 1)
     prog.AddQuadraticErrorCost(
         np.eye(num_q), q0, trajopt.control_points()[:, -1]
     )
@@ -131,45 +252,33 @@ def motion_test(meshcat, obj_traj, obj_catch_t):
     )
     # end with velocity equal to object's velocity at that moment
     obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,) np array
+    final_vel_constraint = SpatialVelocityConstraint(
+        plant_auto_diff,
+        plant_auto_diff.world_frame(),
+        obj_vel_at_catch - 0.5,  # upper limit
+        obj_vel_at_catch + 0.5,  # lower limit
+        plant_auto_diff.GetFrameByName("iiwa_link_7"),
+        np.array([0, 0, 0]).reshape(-1,1),
+        plant_auto_diff.CreateDefaultContext(),
+    )
+    trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
-    # final_vel_constraint = SpatialVelocityConstraint(
-    #     plant,
-    #     world_frame,
-    #     obj_vel_at_catch,  # upper limit
-    #     obj_vel_at_catch,  # lower limit
-    #     gripper_frame,
-    #     [0, 0, 0],
-    #     plant_context,
-    # )
-    # trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
-
-    # collision constraints
-    # collision_constraint = MinimumDistanceLowerBoundConstraint(
-    #     plant, 0.001, plant_context, None, 0.01
-    # )
-    # evaluate_at_s = np.linspace(0, 1, 50)
-    # for s in evaluate_at_s:
-    #     trajopt.AddPathPositionConstraint(collision_constraint, s)
 
     result = Solve(prog)
     if not result.is_success():
-        print("ERROR: Trajectory optimization failed")
-        print(result.get_solver_id().name())
+        print("ERROR: First Trajectory optimization failed: " + str(result.get_solver_id().name()))
+    else:
+        print("First solve succeeded.")
+    
+    # Try again but with the last attempt as an initial guess
+    solved_traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
+    trajopt.SetInitialGuess(solved_traj)
+    result = Solve(prog)
+    if not result.is_success():
+        print("ERROR: Second Trajectory optimization failed: " + str(result.get_solver_id().name()))
+    else:
+        print("Second solve succeeded.")
 
-    # print(f"result.GetSolution(): {result.GetSolution()}")
     final_traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
-    print(f"final_traj.value(0): {final_traj.value(0)}")
-
-    # Visualize the final trajectory
-    # params = MeshcatVisualizerParams()
-    # params.prefix = "gripper"
-    # meshcat_vis = MeshcatVisualizer.AddToBuilder(
-    #     builder, scene_graph, meshcat, params
-    # )
-    # diagram = builder.Build()
-    # context = diagram.CreateDefaultContext()
-    # PublishPositionTrajectory(
-    #     trajopt.ReconstructTrajectory(result), context, plant, meshcat_vis
-    # )
 
     return final_traj

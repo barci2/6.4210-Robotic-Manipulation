@@ -28,6 +28,18 @@ import numpy as np
 from scipy.spatial import KDTree
 
 
+class TrajectoryWrapper():
+    def __init__(self):
+        # Bare constructor that is used when defining the type of the AbstractInputPort
+        self.trajectory = None
+
+    def add_trajectory_object(self, trajectory):
+        # trajectory is a drake Trajectory object
+        self.trajectory = trajectory
+
+    def value(self, t):
+        return self.trajectory.value(t)
+
 class GraspSelector(LeafSystem):
     """
     Use method described in this paper: https://arxiv.org/pdf/1706.09911.pdf to
@@ -40,8 +52,8 @@ class GraspSelector(LeafSystem):
             xx
         """
         LeafSystem.__init__(self)
-        obj_pc = AbstractValue.Make(PointCloud(0))
-        obj_traj = AbstractValue.Make(Trajectory())
+        obj_pc = AbstractValue.Make(PointCloud())
+        obj_traj = AbstractValue.Make(TrajectoryWrapper())
         self.DeclareAbstractInputPort("object_pc", obj_pc)
         self.DeclareAbstractInputPort("object_trajectory", obj_traj)
         
@@ -107,12 +119,9 @@ class GraspSelector(LeafSystem):
         context = diagram.CreateDefaultContext()
         diagram.ForcedPublish(context)
 
-    def compute_sdf(self, obj_pc, X_G, visualize=False):
+    def check_collision(self, obj_pc, X_G, visualize=False):
         """
         TODO: Speed up this function.
-
-        Given that the runtime doesn't decrease a lot by increasing the downsampling of PC,
-        the runtime seems to be mainly from the overhead of setting up the new diagram
         """
         plant_context = self.plant.GetMyContextFromRoot(self.context)
         scene_graph_context = self.scene_graph.GetMyContextFromRoot(self.context)
@@ -125,15 +134,14 @@ class GraspSelector(LeafSystem):
             scene_graph_context
         )
 
-        obj_pc_sdf = np.inf
         for pt in obj_pc.xyzs().T:
             distances = query_object.ComputeSignedDistanceToPoint(pt)
             for body_index in range(len(distances)):
                 distance = distances[body_index].distance
-                if distance < obj_pc_sdf:
-                    obj_pc_sdf = distance
+                if distance < 0:
+                    return True  # Collision
 
-        return obj_pc_sdf
+        return False
 
 
     def compute_darboux_frame(self, index, obj_pc, kdtree, ball_radius=0.002, max_nn=50):
@@ -281,8 +289,8 @@ class GraspSelector(LeafSystem):
 
             new_X_WG = X_WF @ RigidTransform(np.array([0, -0.05, 0]))  # Move grasper back by fixed amount
 
-            # compute_sdf takes most of the runtime
-            if (self.compute_sdf(obj_pc, new_X_WG) > 0.001) and self.check_nonempty(obj_pc, new_X_WG):  # no collision, and there is an object between fingers
+            # check_collision takes most of the runtime
+            if (self.check_collision(obj_pc, new_X_WG) is not True) and self.check_nonempty(obj_pc, new_X_WG):  # no collision, and there is an object between fingers
                 with candidate_lst_lock:
                     candidate_lst.append(new_X_WG)
 
@@ -340,6 +348,10 @@ class GraspSelector(LeafSystem):
         X_WG_y_axis_vector = X_WO @ X_OG_y_axis_vector
         # On the order of 0 - PI
         angle = np.arccos(np.dot(X_WG_to_z_axis_vector, X_WG_y_axis_vector) / (np.linalg.norm(X_WG_to_z_axis_vector) * np.linalg.norm(X_WG_y_axis_vector)))
+
+        # Add cost associated with whether object is able to fly in between two fingers of gripper
+        # Z-axis of gripper should be aligned with derivative of obj trajectory
+
 
         # Use IK to find joint positions for the given grasp pose
         # ik = InverseKinematics(self.plant)
