@@ -4,7 +4,7 @@ Output ports:
  - A downsampled PointCloud object (containing just the object) in Object frame
 """
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from pydrake.all import (
     AbstractValue,
     Trajectory,
@@ -43,7 +43,7 @@ def add_cameras(
         horizontal_num: int,
         vertical_num: int,
         camera_distance: float
-    ) -> Tuple[list[RgbdSensor], list[RigidTransform]]:
+    ) -> Tuple[List[RgbdSensor], List[RigidTransform]]:
     camera_config = CameraConfig()
     camera_config.width = camera_width
     camera_config.height = camera_height
@@ -94,8 +94,8 @@ class TrajectoryPredictor(LeafSystem):
     """
     def __init__(
             self,
-            cameras: list[RgbdSensor],
-            camera_transforms: list[RigidTransform],
+            cameras: List[RgbdSensor],
+            camera_transforms: List[RigidTransform],
             pred_thresh: int,
             thrown_model_name: int,
             plant: MultibodyPlant,

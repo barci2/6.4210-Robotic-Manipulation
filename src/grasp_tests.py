@@ -300,6 +300,8 @@ def grasp_cost(obj_pc_centroid, grasp):
         grasp: RigidTransform containing gripper pose for this grasp
     """
 
+    # Transform the grasp pose from object frame to world frame
+
     # Use IK to find joint positions for the given grasp pose
 
     # Compute distance from Y-axis ray of gripper frame to objects' centroid.
@@ -313,20 +315,19 @@ def grasp_cost(obj_pc_centroid, grasp):
 
     return final_cost
 
-obj_pc_downsampled = obj_pc.VoxelizedDownSample(voxel_size=0.0075)
+obj_pc = obj_pc.VoxelizedDownSample(voxel_size=0.0075)
 
 obj_pc_centroid = np.mean(obj_pc.xyzs(), axis=1)  # column-wise mean of 3xN np array of points
-print(obj_pc_centroid)
 
 start = time.time()
 grasp_candidates = compute_candidate_grasps(
-    obj_pc_downsampled, candidate_num=20, random_seed=12
+    obj_pc, candidate_num=20, random_seed=12
 )
 print(time.time() - start)
 print(f"grasp_candidates: {grasp_candidates}")
 
 meshcat.Delete()
-meshcat.SetObject("cloud", obj_pc_downsampled)
+meshcat.SetObject("cloud", obj_pc)
 
 """
 Iterate through all grasps and select the best based on the following heuristic:
