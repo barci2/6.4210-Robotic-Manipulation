@@ -11,7 +11,8 @@ import time
 
 import numpy as np
 from pydrake.all import (
-    MultibodyPlant,
+    AddMultibodyPlantSceneGraph,
+    DiagramBuilder,
     BsplineTrajectory,
     KinematicTrajectoryOptimization,
     MinimumDistanceLowerBoundConstraint,
@@ -22,7 +23,9 @@ from pydrake.all import (
     Solve,
     Sphere,
     Rgba,
-    Quaternion
+    Quaternion,
+    MeshcatVisualizer,
+    MeshcatVisualizerParams,
 )
 
 from manipulation.meshcat_utils import PublishPositionTrajectory, AddMeshcatTriad
@@ -30,9 +33,9 @@ from manipulation.scenarios import AddIiwa, AddPlanarIiwa, AddShape, AddWsg
 from manipulation.utils import ConfigureParser
 
 def motion_test(meshcat, obj_traj, obj_catch_t):
-
     # Setup a new MBP with just the iiwa which the KinematicTrajectoryOptimization will use
-    plant = MultibodyPlant(0.0)
+    builder = DiagramBuilder()
+    plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
     iiwa_file = "package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf"
     iiwa = Parser(plant).AddModelsFromUrl(iiwa_file)[0]  # ModelInstance object
     # wsg_file = "package://drake/manipulation/models/wsg_50_description/sdf/schunk_wsg_50_with_tip.sdf"
@@ -129,16 +132,16 @@ def motion_test(meshcat, obj_traj, obj_catch_t):
     # end with velocity equal to object's velocity at that moment
     obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,) np array
 
-    final_vel_constraint = SpatialVelocityConstraint(
-        plant,
-        world_frame,
-        obj_vel_at_catch,  # upper limit
-        obj_vel_at_catch,  # lower limit
-        gripper_frame,
-        [0, 0, 0],
-        plant_context,
-    )
-    trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
+    # final_vel_constraint = SpatialVelocityConstraint(
+    #     plant,
+    #     world_frame,
+    #     obj_vel_at_catch,  # upper limit
+    #     obj_vel_at_catch,  # lower limit
+    #     gripper_frame,
+    #     [0, 0, 0],
+    #     plant_context,
+    # )
+    # trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
     # collision constraints
     # collision_constraint = MinimumDistanceLowerBoundConstraint(
@@ -150,9 +153,23 @@ def motion_test(meshcat, obj_traj, obj_catch_t):
 
     result = Solve(prog)
     if not result.is_success():
-        print("Trajectory optimization failed")
+        print("ERROR: Trajectory optimization failed")
         print(result.get_solver_id().name())
 
-    print(f"result.GetSolution(): {result.GetSolution()}")
+    # print(f"result.GetSolution(): {result.GetSolution()}")
     final_traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
     print(f"final_traj.value(0): {final_traj.value(0)}")
+
+    # Visualize the final trajectory
+    # params = MeshcatVisualizerParams()
+    # params.prefix = "gripper"
+    # meshcat_vis = MeshcatVisualizer.AddToBuilder(
+    #     builder, scene_graph, meshcat, params
+    # )
+    # diagram = builder.Build()
+    # context = diagram.CreateDefaultContext()
+    # PublishPositionTrajectory(
+    #     trajopt.ReconstructTrajectory(result), context, plant, meshcat_vis
+    # )
+
+    return final_traj

@@ -68,8 +68,8 @@ def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str) -
 
     # Generate random object pose
     z = 0.75  # fixed z for now
-    x = np.random.uniform(2, 3) * np.random.choice([-1, 1])
-    y = np.random.uniform(2, 3) * np.random.choice([-1, 1])
+    x = np.random.uniform(3, 4) * np.random.choice([-1, 1])
+    y = np.random.uniform(3, 4) * np.random.choice([-1, 1])
 
     # Set object pose
     body_idx = plant.GetBodyIndices(model_instance)[0]  # BodyIndex object
@@ -94,7 +94,7 @@ def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str) -
     z_perturb = np.random.uniform(-0.5, 0.5)
     v_x = -v_magnitude * cos_alpha
     v_y = -v_magnitude * sin_alpha
-    v_z = 2 + z_perturb
+    v_z = 3 + z_perturb
 
     # Define the spatial velocity
     spatial_velocity = SpatialVelocity(

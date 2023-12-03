@@ -56,6 +56,9 @@ def setup_grasp_diagram(draw_frames=True):
 def draw_grasp_candidate(
     X_G, prefix="gripper", draw_frames=True, refresh=False
 ):
+    """
+    Helper function to visualize grasp.
+    """
     if refresh:
         meshcat.Delete()
     builder = DiagramBuilder()
@@ -167,12 +170,15 @@ def compute_darboux_frame(index, obj_pc, kdtree, ball_radius=0.002, max_nn=50):
 
 def check_nonempty(obj_pc, X_WG, visualize=False):
     """
-    Check if the "closing region" of the gripper is nonempty by transforming the pointclouds to gripper coordinates.
+    Check if the "closing region" of the gripper is nonempty by transforming the
+    pointclouds to gripper coordinates.
+
     Args:
       - obj_pc (PointCloud object): pointcloud of the object.
       - X_WG (Drake RigidTransform): transform of the gripper.
     Return:
-      - is_nonempty (boolean): boolean set to True if there is a point within the cropped region.
+      - is_nonempty (boolean): boolean set to True if there is a point within
+        the cropped region.
     """
     obj_pc_W_np = obj_pc.xyzs()
 
@@ -266,7 +272,16 @@ def compute_candidate_grasps(obj_pc, candidate_num=10, random_seed=5):
     candidate_lst_lock = threading.Lock()
     for i in range(candidate_num):
         random_idx = np.random.randint(0, obj_pc.size())
-        t = threading.Thread(target=compute_candidate, args=(random_idx, obj_pc, kdtree, ball_radius, x_min, x_max, phi_min, phi_max, candidate_lst_lock, candidate_lst))
+        t = threading.Thread(target=compute_candidate, args=(random_idx, 
+                                                             obj_pc, 
+                                                             kdtree, 
+                                                             ball_radius, 
+                                                             x_min, 
+                                                             x_max, 
+                                                             phi_min, 
+                                                             phi_max, 
+                                                             candidate_lst_lock, 
+                                                             candidate_lst))
         threads.append(t)
         t.start()
 
@@ -275,6 +290,28 @@ def compute_candidate_grasps(obj_pc, candidate_num=10, random_seed=5):
 
     return candidate_lst
 
+
+def grasp_cost(obj_pc_centroid, grasp):
+    """
+    Defines cost function that is used to pick best grasp sample.
+
+    Args:
+        obj_pc_centroid: (3,) np array
+        grasp: RigidTransform containing gripper pose for this grasp
+    """
+
+    # Use IK to find joint positions for the given grasp pose
+
+    # Compute distance from Y-axis ray of gripper frame to objects' centroid.
+    obj_pc_centroid_relative_to_X_WG = obj_pc_centroid - grasp.translation()
+    X_WG_y_axis_vector = grasp.rotation().matrix()[:, 1]
+    projection_obj_pc_centroid_relative_to_X_WG_onto_X_WG_y_axis_vector = (np.dot(obj_pc_centroid_relative_to_X_WG, X_WG_y_axis_vector) / np.linalg.norm(X_WG_y_axis_vector)) * X_WG_y_axis_vector  # Equation for projection of one vector onto another
+    distance_obj_pc_centroid_to_X_WG_y_axis = np.linalg.norm(obj_pc_centroid_relative_to_X_WG - projection_obj_pc_centroid_relative_to_X_WG_onto_X_WG_y_axis_vector)
+
+    # Weight the different parts of the cost function
+    final_cost = distance_obj_pc_centroid_to_X_WG_y_axis
+
+    return final_cost
 
 obj_pc_downsampled = obj_pc.VoxelizedDownSample(voxel_size=0.0075)
 
@@ -297,19 +334,15 @@ Minimum distance between the centroid of the object and the y-axis ray of X_WG.
 
 This ensures the gripper doesn't try to grab an edge of the object.
 """
-min_distance_obj_pc_centroid_to_y_axis_ray = float('inf')
-min_distance_grasp = None
+min_cost = float('inf')
+min_cost_grasp = None
 for i in range(len(grasp_candidates)):
-    obj_pc_centroid_relative_to_X_WG = obj_pc_centroid - grasp_candidates[i].translation()
-    X_WG_y_axis_vector = grasp_candidates[i].rotation().matrix()[:, 1]
-    projection_obj_pc_centroid_relative_to_X_WG_onto_X_WG_y_axis_vector = (np.dot(obj_pc_centroid_relative_to_X_WG, X_WG_y_axis_vector) / np.linalg.norm(X_WG_y_axis_vector)) * X_WG_y_axis_vector  # Equation for projection of one vector onto another
-    distance_obj_pc_centroid_to_X_WG_y_axis = np.linalg.norm(obj_pc_centroid_relative_to_X_WG - projection_obj_pc_centroid_relative_to_X_WG_onto_X_WG_y_axis_vector)
 
-    if distance_obj_pc_centroid_to_X_WG_y_axis < min_distance_obj_pc_centroid_to_y_axis_ray:
-        min_distance_obj_pc_centroid_to_y_axis_ray = distance_obj_pc_centroid_to_X_WG_y_axis
-        min_distance_grasp = grasp_candidates[i]
+    grasp_cost = grasp_cost(obj_pc_centroid, grasp_candidates[i])
 
-    print(f"y_vector: {X_WG_y_axis_vector}")
+    if grasp_cost < min_cost:
+        min_cost = grasp_cost
+        min_cost_grasp = grasp_candidates[i]
 
     # draw all grasp candidates
     # draw_grasp_candidate(
@@ -317,5 +350,5 @@ for i in range(len(grasp_candidates)):
     # )
 
 draw_grasp_candidate(
-    min_distance_grasp, prefix="gripper_best", draw_frames=False
+    min_cost_grasp, prefix="gripper_best", draw_frames=False
 )

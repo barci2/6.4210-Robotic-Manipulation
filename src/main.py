@@ -1,5 +1,3 @@
-import os
-
 from pydrake.all import (
     DiagramBuilder,
     StartMeshcat,
@@ -19,6 +17,7 @@ from manipulation.meshcat_utils import AddMeshcatTriad, PublishPositionTrajector
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import time
 from utils import (
     visualize_camera_plt,
     diagram_visualize_connections,
@@ -88,8 +87,8 @@ joint_idx = plant.GetJointIndices(obj)[0]  # JointIndex object
 joint = plant.get_joint(joint_idx)  # Joint object
 joint.Lock(plant_context)
 
-##### Throwing the object #####
 throw_object(plant, plant_context, obj_name)
+
 
 
 # Motion Planning Testing
@@ -98,7 +97,7 @@ throw_object(plant, plant_context, obj_name)
 t = plant_context.get_time()
 test_obj_traj = PiecewisePolynomial.FirstOrderHold(
             [t, t + 1],  # Time knots
-            np.array([[-1, 1], [-1, 0], [1, 1], [0, 0], [0, 0], [0, 0], [1, 1]])
+            np.array([[-1, 0.75], [-1, 0], [0.75, 0.75], [0, 0], [0, 0], [0, 0], [1, 1]])
             )
 
 # motion_test(meshcat, test_obj_traj, 1)
