@@ -318,6 +318,7 @@ class GraspSelector(LeafSystem):
         X_WG = X_WO @ X_OG
 
         # Add cost associated with whether X_WG's y-axis points away from iiwa (which is what we want)
+        # TODO: VALIDATE THIS MATH
         X_WG_to_z_axis_vector = np.append(X_WG.translation()[:2], 0)  # basically replacing z with 0
         X_WG_y_axis_vector = X_WO @ X_OG_y_axis_vector
         # On the order of 0 - PI
@@ -325,6 +326,13 @@ class GraspSelector(LeafSystem):
 
         # Add cost associated with whether object is able to fly in between two fingers of gripper
         # Z-axis of gripper should be aligned with derivative of obj trajectory
+        # TODO: VALIDATE THIS MATH
+        obj_vel_at_catch = self.obj_traj.EvalDerivative(t)[:3]  # (3,) np array
+        obj_direction_at_catch = obj_vel_at_catch / np.linalg.norm(obj_vel_at_catch)  # normalize
+        X_OG_z_axis_vector = X_OG.rotation().matrix()[:, 1]
+        X_WG_z_axis_vector = X_WO @ X_OG_z_axis_vector
+        # on the order of 0 - 1
+        alignment = 1 - np.dot(obj_direction_at_catch, X_WG_z_axis_vector)
 
 
         # Use IK to find joint positions for the given grasp pose
@@ -341,7 +349,7 @@ class GraspSelector(LeafSystem):
         # q = result.GetSolution(q)
 
         # Weight the different parts of the cost function
-        final_cost = 100*distance_obj_pc_centroid_to_X_OG_y_axis + angle
+        final_cost = 100*distance_obj_pc_centroid_to_X_OG_y_axis + angle + 5*alignment
 
         return final_cost
     
