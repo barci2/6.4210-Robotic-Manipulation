@@ -132,7 +132,7 @@ test_obj_traj = PiecewisePolynomial.FirstOrderHold(
 
 start = time.time()
 q_traj = motion_test(plant, meshcat, test_obj_traj, 1)
-print(time.time() - start)
+print(f"Time to perform traj opt: {time.time() - start}")
 
 # Connect output of motion system to input of iiwa's controller
 q_traj_system = builder.AddSystem(TrajectorySource(q_traj))

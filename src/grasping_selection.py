@@ -235,7 +235,6 @@ class GraspSelector(LeafSystem):
         Args:
             - obj_pc (PointCloud object): pointcloud of the object.
             - candidate_num (int) : number of desired candidates.
-            - random_seed (int) : seed for rng, used for grading.
         Return:
             - candidate_lst (list of drake RigidTransforms) : candidate list of grasps.
         """
@@ -392,7 +391,7 @@ class GraspSelector(LeafSystem):
         print(time.time() - start)
         print(f"grasp_candidates: {grasp_candidates}")
 
-        self.meshcat.Delete()
+        # self.meshcat.Delete()
         self.meshcat.SetObject("cloud", obj_pc)
 
         """
