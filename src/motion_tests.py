@@ -47,12 +47,15 @@ def add_constraints(plant,
                     q0, 
                     obj_traj, 
                     obj_catch_t,
+                    duration_cost=50.0,
                     acceptable_pos_err=0.0,
-                    theta_bound = 0.2,
-                    acceptable_vel_err=0.5):
+                    theta_bound = 0.05,
+                    acceptable_vel_err=0.05):
     """
     Relevant Constraints who have tunable acceptable error measurements.
     """
+    trajopt.AddDurationCost(duration_cost)  # increase to make iiwa faster
+
     trajopt.AddDurationConstraint(0.5, 50)
 
     # start constraint
@@ -110,7 +113,7 @@ def add_constraints(plant,
         np.array([0, 0, 0]).reshape(-1,1),
         plant_auto_diff.CreateDefaultContext(),
     )
-    trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
+    # trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
     # collision constraints
     # collision_constraint = MinimumDistanceLowerBoundConstraint(
@@ -119,6 +122,8 @@ def add_constraints(plant,
     # evaluate_at_s = np.linspace(0, 1, 50)
     # for s in evaluate_at_s:
     #     trajopt.AddPathPositionConstraint(collision_constraint, s)
+
+    return final_vel_constraint
 
 
 def motion_test(original_plant, meshcat, obj_traj, obj_catch_t):
@@ -181,8 +186,7 @@ def motion_test(original_plant, meshcat, obj_traj, obj_catch_t):
     path_guess = BsplineTrajectory(trajopt.basis(), q_guess)
     trajopt.SetInitialGuess(path_guess)
 
-    trajopt.AddDurationCost(5.0)  # increase to make iiwa faster
-    # trajopt.AddPathLengthCost(1.0)
+    trajopt.AddPathLengthCost(1.0)
     trajopt.AddPositionBounds(
         plant.GetPositionLowerLimits(), plant.GetPositionUpperLimits()
     )
@@ -190,95 +194,62 @@ def motion_test(original_plant, meshcat, obj_traj, obj_catch_t):
         plant.GetVelocityLowerLimits(), plant.GetVelocityUpperLimits()
     )
 
-    # add_constraints(plant, 
-    #                 plant_context, 
-    #                 plant_auto_diff, 
-    #                 trajopt, 
-    #                 prog, 
-    #                 world_frame, 
-    #                 gripper_frame, 
-    #                 X_WStart, 
-    #                 X_WGoal, 
-    #                 num_q, 
-    #                 q0, 
-    #                 obj_traj, 
-    #                 obj_catch_t)
-
-    trajopt.AddDurationConstraint(0.5, 50)
-
-    # start constraint
-    start_constraint = PositionConstraint(
-        plant,
-        world_frame,
-        X_WStart.translation(),  # upper limit
-        X_WStart.translation(),  # lower limit
-        gripper_frame,
-        [0, 0.1, 0],
-        plant_context,
-    )
-    trajopt.AddPathPositionConstraint(start_constraint, 0)
-    prog.AddQuadraticErrorCost(
-        np.eye(num_q), q0, trajopt.control_points()[:, 0]
-    )
-
-    # goal constraint
-    goal_pos_constraint = PositionConstraint(
-        plant,
-        world_frame,
-        X_WGoal.translation(),  # upper limit
-        X_WGoal.translation(),  # lower limit
-        gripper_frame,
-        [0, 0.1, 0],
-        plant_context,
-    )
-    goal_orientation_constraint = OrientationConstraint(
-        plant,
-        world_frame,
-        X_WGoal.rotation(),  # orientation of gripper in world frame ...
-        gripper_frame,
-        RotationMatrix(),  # ... must equal origin in gripper frame
-        0.2,
-        plant_context
-    )
-    trajopt.AddPathPositionConstraint(goal_pos_constraint, 1)
-    trajopt.AddPathPositionConstraint(goal_orientation_constraint, 1)
-    prog.AddQuadraticErrorCost(
-        np.eye(num_q), q0, trajopt.control_points()[:, -1]
-    )
-
-    # start with zero velocity
-    trajopt.AddPathVelocityConstraint(
-        np.zeros((num_q, 1)), np.zeros((num_q, 1)), 0
-    )
-    # end with velocity equal to object's velocity at that moment
-    obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,) np array
-    final_vel_constraint = SpatialVelocityConstraint(
-        plant_auto_diff,
-        plant_auto_diff.world_frame(),
-        obj_vel_at_catch - 0.5,  # upper limit
-        obj_vel_at_catch + 0.5,  # lower limit
-        plant_auto_diff.GetFrameByName("iiwa_link_7"),
-        np.array([0, 0, 0]).reshape(-1,1),
-        plant_auto_diff.CreateDefaultContext(),
-    )
+    final_vel_constraint = add_constraints(plant, 
+                                           plant_context, 
+                                           plant_auto_diff, 
+                                           trajopt, 
+                                           prog, 
+                                           world_frame, 
+                                           gripper_frame, 
+                                           X_WStart, 
+                                           X_WGoal, 
+                                           num_q, 
+                                           q0, 
+                                           obj_traj, 
+                                           obj_catch_t,
+                                           duration_cost=1.0,
+                                           acceptable_pos_err=0.4,
+                                           theta_bound = 0.5,
+                                           acceptable_vel_err=3.0)
+    
+    # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
     trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
-
+    # First solve with looser constraints
     result = Solve(prog)
     if not result.is_success():
         print("ERROR: First Trajectory optimization failed: " + str(result.get_solver_id().name()))
     else:
         print("First solve succeeded.")
+    solved_traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
     
     # Try again but with the last attempt as an initial guess
-    solved_traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
-    trajopt.SetInitialGuess(solved_traj)
-    result = Solve(prog)
+    trajopt_refined = KinematicTrajectoryOptimization(num_q, 10)  # 10 control points in Bspline
+    prog_refined = trajopt_refined.get_mutable_prog()
+
+    final_vel_constraint = add_constraints(plant, 
+                                           plant_context, 
+                                           plant_auto_diff, 
+                                           trajopt_refined, 
+                                           prog_refined, 
+                                           world_frame, 
+                                           gripper_frame, 
+                                           X_WStart, 
+                                           X_WGoal, 
+                                           num_q, 
+                                           q0, 
+                                           obj_traj, 
+                                           obj_catch_t)
+    # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
+    trajopt_refined.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
+
+    trajopt_refined.SetInitialGuess(solved_traj)
+    result = Solve(prog_refined)
     if not result.is_success():
         print("ERROR: Second Trajectory optimization failed: " + str(result.get_solver_id().name()))
     else:
         print("Second solve succeeded.")
 
-    final_traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
+    final_traj = trajopt_refined.ReconstructTrajectory(result)  # BSplineTrajectory
 
     return final_traj

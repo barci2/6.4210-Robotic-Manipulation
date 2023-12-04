@@ -244,7 +244,7 @@ class TrajectoryPredictor(CameraBackedSystem):
         )
 
         # Update Event
-        self.DeclarePeriodicPublishEvent(0.001, 0.1, self.PredictTrajectory)
+        self.DeclarePeriodicPublishEvent(0.25, 0.1, self.PredictTrajectory)
 
         # Michael commented out `lambda c, o: None` and added `self.CreateOutput`
         port = self.DeclareAbstractOutputPort(

@@ -11,6 +11,7 @@ from manipulation.station import MakeHardwareStation, load_scenario
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import time
 from utils import (
     diagram_visualize_connections,
     throw_object,
@@ -123,7 +124,9 @@ test_obj_traj = PiecewisePolynomial.FirstOrderHold(
             np.array([[-1, 0.55], [-1, 0], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
             )
 
+start = time.time()
 q_traj = motion_test(plant, meshcat, test_obj_traj, 1)
+print(time.time() - start)
 
 # Connect output of motion system to input of iiwa's controller
 q_traj_system = builder.AddSystem(TrajectorySource(q_traj))
@@ -166,7 +169,7 @@ throw_object(plant, plant_context, obj_name)
 ####################################
 ### Running Simulation & Meshcat ###
 ####################################
-simulator.set_target_realtime_rate(0.1)
+simulator.set_target_realtime_rate(1.0)
 simulator.set_publish_every_time_step(True)
 plt.show()
 
