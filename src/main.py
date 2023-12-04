@@ -146,9 +146,9 @@ context = diagram.CreateDefaultContext()
 diagram.set_name("object_catching_system")
 diagram_visualize_connections(diagram, "diagram.svg")
 
-# TEST
-trajectory = motion_planner.GetOutputPort("trajectory").Eval(motion_planner.GetMyMutableContextFromRoot(context))
-print(trajectory)
+### Calculate trajectory
+# trajectory = motion_planner.GetOutputPort("trajectory").Eval(motion_planner.GetMyMutableContextFromRoot(context))
+# print(trajectory)
 
 ########################
 ### Simulation Setup ###
