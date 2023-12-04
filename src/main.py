@@ -19,6 +19,7 @@ from utils import (
 from perception import PointCloudGenerator, TrajectoryPredictor, add_cameras
 
 from grasping_selection import GraspSelector
+from motion_planner import MotionPlanner
 from motion_tests import motion_test  # TEMPORARY
 
 ##### Settings #####
@@ -113,10 +114,15 @@ traj_pred_system.ConnectCameras(builder, icp_cameras)
 builder.Connect(obj_point_cloud_system.GetOutputPort("point_cloud"), traj_pred_system.point_cloud_input_port)
 
 ### Grasp Selector
-# grasp_selector = builder.AddSystem(GraspSelector(plant, scene_graph, diagram, context, meshcat))
-# builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), grasp_selector.GetInputPort("object_trajectory"))
+grasp_selector = builder.AddSystem(GraspSelector(plant, scene_graph, meshcat))
+builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), grasp_selector.GetInputPort("object_trajectory"))
+builder.Connect(obj_point_cloud_system.GetOutputPort("point_cloud"), grasp_selector.GetInputPort("object_pc"))
 
-### Motion Planning
+### Motion Planner
+motion_planner = builder.AddSystem(MotionPlanner(plant, meshcat))
+builder.Connect(grasp_selector.GetOutputPort("grasp_selection"), motion_planner.GetInputPort("grasp_selection"))
+
+
 # linear path for testing
 t = 0
 test_obj_traj = PiecewisePolynomial.FirstOrderHold(
@@ -139,6 +145,10 @@ diagram = builder.Build()
 context = diagram.CreateDefaultContext()
 diagram.set_name("object_catching_system")
 diagram_visualize_connections(diagram, "diagram.svg")
+
+# TEST
+trajectory = motion_planner.GetOutputPort("trajectory").Eval(motion_planner.GetMyMutableContextFromRoot(context))
+print(trajectory)
 
 ########################
 ### Simulation Setup ###

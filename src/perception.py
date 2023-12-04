@@ -205,7 +205,7 @@ class PointCloudGenerator(CameraBackedSystem):
         return self._point_cloud_output
 
     def OutputPointCloud(self, context: Context, output: Value) -> None:
-        output.set_value(self._point_cloud)
+        output.set_value(self._point_cloud.VoxelizedDownSample(voxel_size=0.0075))
 
     def CapturePointCloud(self, context: Context) -> None:
         points = (self.GetCameraPoints(context).T - self._cameras_center).T

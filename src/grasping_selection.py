@@ -46,12 +46,9 @@ class GraspSelector(LeafSystem):
     sample potential grasps until finding one at a desirable position for iiwa.
     """
 
-    def __init__(self, plant, scene_graph, diagram, context, meshcat):
-        """
-        Args:
-            xx
-        """
+    def __init__(self, plant, scene_graph, meshcat):
         LeafSystem.__init__(self)
+
         obj_pc = AbstractValue.Make(PointCloud())
         obj_traj = AbstractValue.Make(TrajectoryWrapper())
         self.DeclareAbstractInputPort("object_pc", obj_pc)
@@ -59,35 +56,14 @@ class GraspSelector(LeafSystem):
         
         port = self.DeclareAbstractOutputPort(
             "grasp_selection",
-            lambda: AbstractValue.Make([RigidTransform()]),  # list of good candidate grasps
+            lambda: AbstractValue.Make({RigidTransform(): 0}),  # dict mapping grasp to a grasp time
             self.SelectGrasp,
         )
         port.disable_caching_by_default()
 
-        # Find range of time where object is likely within iiwa's work evelope
-        self.obj_reachable_start_t = 0.5  # random guess
-        self.obj_reachable_end_t = 1.0  # random guess
-        search_times = np.linspace(0.5, 1, 20)  # assuming first half of trajectory is definitely outside of iiwa's work envelope
-        # Forward search to find the first time that the object is in iiwa's work envelope
-        for t in search_times:
-            obj_pos = obj_traj.value(t)[:3]  # (3,1) np array containing x,y,z
-            obj_dist_from_iiwa_squared = obj_pos[0][0]**2 + obj_pos[1][0]**2
-            # Object is between 420-750mm from iiwa's center in XY plane
-            if obj_dist_from_iiwa_squared > 0.42**2 and obj_dist_from_iiwa_squared < 0.75**2:
-                self.obj_reachable_start_t = t
-        # Backward search to find last time
-        for t in search_times[::-1]:
-            obj_pos = obj_traj.value(t)[:3]  # (3,1) np array containing x,y,z
-            obj_dist_from_iiwa_squared = obj_pos[0][0]**2 + obj_pos[1][0]**2
-            # Object is between 420-750mm from iiwa's center in XY plane
-            if obj_dist_from_iiwa_squared > 0.42**2 and obj_dist_from_iiwa_squared < 0.75**2:
-                self.obj_reachable_end_t = t
-
         self._rng = np.random.default_rng()
         self.plant = plant
         self.scene_graph = scene_graph
-        self.diagram = diagram
-        self.context = context
         self.meshcat = meshcat
 
 
@@ -119,29 +95,27 @@ class GraspSelector(LeafSystem):
         context = diagram.CreateDefaultContext()
         diagram.ForcedPublish(context)
 
-    def check_collision(self, obj_pc, X_G, visualize=False):
+    def check_collision(self, obj_pc, X_G):
         """
         TODO: Speed up this function.
         """
-        plant_context = self.plant.GetMyContextFromRoot(self.context)
-        scene_graph_context = self.scene_graph.GetMyContextFromRoot(self.context)
-        self.plant.SetFreeBodyPose(plant_context, self.plant.GetBodyByName("body"), X_G)
-
-        if visualize:
-            self.diagram.ForcedPublish(self.context)
-
-        query_object = self.scene_graph.get_query_output_port().Eval(
-            scene_graph_context
-        )
-
-        for pt in obj_pc.xyzs().T:
-            distances = query_object.ComputeSignedDistanceToPoint(pt)
-            for body_index in range(len(distances)):
-                distance = distances[body_index].distance
-                if distance < 0:
-                    return True  # Collision
-
         return False
+        # plant_context = self.plant.GetMyContextFromRoot(self.context)
+        # scene_graph_context = self.scene_graph.GetMyContextFromRoot(self.context)
+        # self.plant.SetFreeBodyPose(plant_context, self.plant.GetBodyByName("body"), X_G)
+
+        # query_object = self.scene_graph.get_query_output_port().Eval(
+        #     scene_graph_context
+        # )
+
+        # for pt in obj_pc.xyzs().T:
+        #     distances = query_object.ComputeSignedDistanceToPoint(pt)
+        #     for body_index in range(len(distances)):
+        #         distance = distances[body_index].distance
+        #         if distance < 0:
+        #             return True  # Collision
+
+        # return False
 
 
     def compute_darboux_frame(self, index, obj_pc, kdtree, ball_radius=0.002, max_nn=50):
@@ -370,13 +344,38 @@ class GraspSelector(LeafSystem):
         final_cost = 100*distance_obj_pc_centroid_to_X_OG_y_axis + angle
 
         return final_cost
-
+    
 
     def SelectGrasp(self, context, output):
 
         obj_pc = self.get_input_port(0).Eval(context)
+        obj_traj = self.get_input_port(1).Eval(context)
+
+        self.meshcat.SetObject("cloud", obj_pc)
 
         obj_pc_centroid = np.mean(obj_pc.xyzs(), axis=1)  # column-wise mean of 3xN np array of points
+
+        # Find range of time where object is likely within iiwa's work evelope
+        self.obj_reachable_start_t = 0.5  # random guess
+        self.obj_reachable_end_t = 1.0  # random guess
+        search_times = np.linspace(0.5, 1, 20)  # assuming first half of trajectory is definitely outside of iiwa's work envelope
+        # Forward search to find the first time that the object is in iiwa's work envelope
+        for t in search_times:
+            obj_pos = obj_traj.value(t)[:3]  # (3,1) np array containing x,y,z
+            obj_dist_from_iiwa_squared = obj_pos[0][0]**2 + obj_pos[1][0]**2
+            # Object is between 420-750mm from iiwa's center in XY plane
+            if obj_dist_from_iiwa_squared > 0.42**2 and obj_dist_from_iiwa_squared < 0.75**2:
+                self.obj_reachable_start_t = t
+        # Backward search to find last time
+        for t in search_times[::-1]:
+            obj_pos = obj_traj.value(t)[:3]  # (3,1) np array containing x,y,z
+            obj_dist_from_iiwa_squared = obj_pos[0][0]**2 + obj_pos[1][0]**2
+            # Object is between 420-750mm from iiwa's center in XY plane
+            if obj_dist_from_iiwa_squared > 0.42**2 and obj_dist_from_iiwa_squared < 0.75**2:
+                self.obj_reachable_end_t = t
+        
+        # For now, all grasps will happen in the middle of when obj is in iiwa's work envelope
+        obj_catch_t = 0.5*(self.obj_reachable_start_t + self.obj_reachable_end_t)
 
         start = time.time()
         grasp_candidates = self.compute_candidate_grasps(
@@ -398,13 +397,11 @@ class GraspSelector(LeafSystem):
         min_cost_grasp = None
         for i in range(len(grasp_candidates)):
             
-            # For now, all grasps will happen in the middle of when obj is in iiwa's work envelope
-            t = 0.5*(self.obj_reachable_start_t + self.obj_reachable_end_t)
-            grasp_cost = grasp_cost(obj_pc_centroid, grasp_candidates[i], t)
+            grasp_cost = grasp_cost(obj_pc_centroid, grasp_candidates[i], obj_catch_t)
 
             if grasp_cost < min_cost:
                 min_cost = grasp_cost
-                min_cost_grasp = grasp_candidates[i]
+                min_cost_grasp = {grasp_candidates[i], obj_catch_t}
 
             # draw all grasp candidates
             # draw_grasp_candidate(
@@ -415,4 +412,4 @@ class GraspSelector(LeafSystem):
             min_cost_grasp, prefix="gripper_best", draw_frames=False
         )
 
-        output.set_value(min_cost_grasp)  # set output port value to the best grasp
+        output.set_value(min_cost_grasp)

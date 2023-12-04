@@ -26,13 +26,9 @@ from pydrake.all import (
     Rgba,
     Quaternion,
     RotationMatrix,
-    MeshcatVisualizer,
-    MeshcatVisualizerParams,
 )
 
-from manipulation.meshcat_utils import PublishPositionTrajectory, AddMeshcatTriad
-from manipulation.scenarios import AddIiwa, AddPlanarIiwa, AddShape, AddWsg
-from manipulation.utils import ConfigureParser
+from manipulation.meshcat_utils import AddMeshcatTriad
 
 def add_constraints(plant, 
                     plant_context, 
@@ -113,7 +109,6 @@ def add_constraints(plant,
         np.array([0, 0, 0]).reshape(-1,1),
         plant_auto_diff.CreateDefaultContext(),
     )
-    # trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
     # collision constraints
     # collision_constraint = MinimumDistanceLowerBoundConstraint(
@@ -223,10 +218,9 @@ def motion_test(original_plant, meshcat, obj_traj, obj_catch_t):
         print("First solve succeeded.")
     solved_traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
     
-    # Try again but with the last attempt as an initial guess
+    # Try again but with tighter constraints and using the last attempt as an initial guess
     trajopt_refined = KinematicTrajectoryOptimization(num_q, 10)  # 10 control points in Bspline
     prog_refined = trajopt_refined.get_mutable_prog()
-
     final_vel_constraint = add_constraints(plant, 
                                            plant_context, 
                                            plant_auto_diff, 
