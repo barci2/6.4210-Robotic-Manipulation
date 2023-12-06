@@ -1,6 +1,6 @@
 """ Miscellaneous Utility functions """
 from enum import Enum
-from typing import BinaryIO, Optional, Union
+from typing import BinaryIO, Optional, Union, Tuple
 from pydrake.all import (
     DiagramBuilder,
     Diagram,
@@ -11,8 +11,10 @@ from pydrake.all import (
     Context,
     CameraConfig
 )
+from dataclasses import dataclass, field
 from pydrake.common.yaml import yaml_load_typed
 import numpy as np
+import numpy.typing as npt
 import pydot
 import matplotlib.pyplot as plt
 
@@ -104,3 +106,40 @@ def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str) -
     plant.SetFreeBodySpatialVelocity(
         context=plant_context, body=body, V_WB=spatial_velocity
     )
+
+@dataclass
+class ObjectTrajectory:
+    x: Tuple[np.float32, np.float32, np.float32] = (0, 0, 0)
+    y: Tuple[np.float32, np.float32, np.float32] = (0, 0, 0)
+    z: Tuple[np.float32, np.float32, np.float32] = (0, 0, 0)
+
+    @staticmethod
+    def _solve_single_traj(
+            a: np.float32,
+            v1: np.float32,
+            t1: np.float32,
+            v2: np.float32,
+            t2: np.float32
+        ) -> npt.NDArray[np.float32]:
+        return (a, *np.linalg.solve([[t1, 1], [t2, 2]], [v1 - a * t1 ** 2, v2 - a * t2 ** 2]))
+
+    @staticmethod
+    def CalculateTrajectory(
+            p1: npt.NDArray[np.float32],
+            t1: np.float32,
+            p2: npt.NDArray[np.float32],
+            t2: np.float32,
+            g: np.float32 = 9.81,
+        ) -> "ObjectTrajectory":
+        return ObjectTrajectory(
+            ObjectTrajectory._solve_single_traj(0, p1[0], t1, p2[0], t2),
+            ObjectTrajectory._solve_single_traj(0, p1[1], t1, p2[1], t2),
+            ObjectTrajectory._solve_single_traj(-g, p1[2], t1, p2[2], t2)
+        )
+
+    def value(self, t: np.float32) -> npt.NDArray[np.float32]:
+        return [
+            self.x[0] * t ** 2 + self.x[1] * t + self.x[2],
+            self.y[0] * t ** 2 + self.y[1] * t + self.y[2],
+            self.z[0] * t ** 2 + self.z[1] * t + self.z[2],
+        ]
