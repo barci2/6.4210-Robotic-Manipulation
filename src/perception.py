@@ -4,6 +4,7 @@ Output ports:
  - A downsampled PointCloud object (containing just the object) in Object frame
 """
 
+from dataclasses import dataclass
 from typing import Optional, Tuple, List
 from pydrake.all import (
     AbstractValue,
@@ -28,13 +29,53 @@ from pydrake.all import (
     Rgba,
     Meshcat,
     PiecewisePolynomial,
-    Value
+    RotationMatrix,
+    Value,
+    Sphere
 )
 import numpy as np
 import numpy.typing as npt
 import itertools
 import matplotlib.pyplot as plt
+from scipy.spatial import KDTree
+from manipulation.meshcat_utils import AddMeshcatTriad
 
+@dataclass
+class ObjectTrajectory:
+    x: Tuple[np.float32, np.float32, np.float32]
+    y: Tuple[np.float32, np.float32, np.float32]
+    z: Tuple[np.float32, np.float32, np.float32]
+
+    @staticmethod
+    def _solve_single_traj(
+            a: np.float32,
+            v1: np.float32,
+            t1: np.float32,
+            v2: np.float32,
+            t2: np.float32
+        ) -> npt.NDArray[np.float32]:
+        return (a, *np.linalg.solve([[t1, 1], [t2, 2]], [v1 - a * t1 ** 2, v2 - a * t2 ** 2]))
+
+    @staticmethod
+    def CalculateTrajectory(
+            p1: npt.NDArray[np.float32],
+            t1: np.float32,
+            p2: npt.NDArray[np.float32],
+            t2: np.float32,
+            g: np.float32 = 9.81,
+        ) -> "ObjectTrajectory":
+        return ObjectTrajectory(
+            ObjectTrajectory._solve_single_traj(0, p1[0], t1, p2[0], t2),
+            ObjectTrajectory._solve_single_traj(0, p1[1], t1, p2[1], t2),
+            ObjectTrajectory._solve_single_traj(-g, p1[2], t1, p2[2], t2)
+        )
+
+    def value(self, t: np.float32) -> npt.NDArray[np.float32]:
+        return [
+            self.x[0] * t ** 2 + self.x[1] * t + self.x[2],
+            self.y[0] * t ** 2 + self.y[1] * t + self.y[2],
+            self.z[0] * t ** 2 + self.z[1] * t + self.z[2],
+        ]
 
 group_idx = 0
 def add_cameras(
@@ -170,7 +211,7 @@ class CameraBackedSystem(LeafSystem):
         if points.shape[1] > 0:
             cloud.mutable_xyzs()[:] = points
         if self._meshcat is not None:
-            self._meshcat.SetObject("TrajectoryPredictorPointCloud", cloud, point_size=0.01, rgba=Rgba(1, 0.5, 0.5))
+            self._meshcat.SetObject(f"{str(self)}PointCloud", cloud, point_size=0.01, rgba=Rgba(1, 0.5, 0.5))
 
 class PointCloudGenerator(CameraBackedSystem):
     def __init__(
@@ -204,15 +245,16 @@ class PointCloudGenerator(CameraBackedSystem):
     def point_cloud_output_port(self) -> OutputPort:
         return self._point_cloud_output
 
-    def OutputPointCloud(self, context: Context, output: Value) -> None:
-        output.set_value(self._point_cloud.VoxelizedDownSample(voxel_size=0.0075))
+    def OutputPointCloud(self, context: Context, output: Value):
+        output.set_value(self._point_cloud)
 
-    def CapturePointCloud(self, context: Context) -> None:
+    def CapturePointCloud(self, context: Context):
         points = (self.GetCameraPoints(context).T - self._cameras_center).T
         self._point_cloud = PointCloud(points.shape[1])
         self._point_cloud.mutable_xyzs()[:] = points
         self.PublishMeshcat(points)
 
+pred_traj_calls = 0
 class TrajectoryPredictor(CameraBackedSystem):
     """
     Performs ICP after first keying out the objects
@@ -224,7 +266,8 @@ class TrajectoryPredictor(CameraBackedSystem):
             pred_thresh: int,
             thrown_model_name: str,
             plant: MultibodyPlant,
-            meshcat: Optional[Meshcat] = None
+            meshcat: Optional[Meshcat] = None,
+            icp_ddist_thresh: float = 1e-3
         ):
         super().__init__(
             cameras=cameras,
@@ -235,6 +278,10 @@ class TrajectoryPredictor(CameraBackedSystem):
             meshcat=meshcat
         )
 
+        self._point_kd_tree = None
+        self._icp_ddist_thresh = icp_ddist_thresh
+        AddMeshcatTriad(self._meshcat, "obj_transform")
+
         # Saved previous poses
         self._poses_state_index = self.DeclareAbstractState(AbstractValue.Make([0.0, 0.0, 0.0]))
 
@@ -244,32 +291,64 @@ class TrajectoryPredictor(CameraBackedSystem):
         )
 
         # Update Event
-        self.DeclarePeriodicPublishEvent(0.25, 0.1, self.PredictTrajectory)
+        self.DeclarePeriodicPublishEvent(0.01, 0.12, self.PredictTrajectory)
 
         # Michael commented out `lambda c, o: None` and added `self.CreateOutput`
         port = self.DeclareAbstractOutputPort(
             "object_trajectory",
-            lambda: AbstractValue.Make((Trajectory())),
+            lambda: AbstractValue.Make(PiecewisePolynomial()),
             # lambda c, o: None,
             self.CreateOutput,
         )
+
+    def _maybe_init_point_cloud(self, context: Context):
+        if self._point_kd_tree is None:
+            points = self._obj_point_cloud_input.Eval(context).xyzs()
+            self._point_kd_tree = KDTree(points.T)
 
     @property
     def point_cloud_input_port(self) -> OutputPort:
         return self._obj_point_cloud_input
 
     def PredictTrajectory(self, context: Context):
-        self._obj_point_cloud_input.Eval(context)
-        points = self.GetCameraPoints(context)
-        if self._meshcat is not None:
-            self.PublishMeshcat(points, self._meshcat)
+        global pred_traj_calls
+        pred_traj_calls += 1
+        self._maybe_init_point_cloud(context)
 
-    @staticmethod
-    def PublishMeshcat(points: npt.NDArray[np.float32], meshcat: Meshcat):
-        cloud = PointCloud(points.shape[1])
-        if points.shape[1] > 0:
-            cloud.mutable_xyzs()[:] = points
-        meshcat.SetObject("TrajectoryPredictorPointCloud", cloud, point_size=0.01, rgba=Rgba(1, 0.5, 0.5))
+        scene_points = self.GetCameraPoints(context)
+        self.PublishMeshcat(scene_points)
+        if scene_points.shape[1] == 0:
+            return
+
+        p_s = scene_points.T.astype(np.float64)
+        X = RigidTransform()
+
+        prev_cost = np.inf
+        while True:
+            d, i = self._point_kd_tree.query(p_s)
+            if prev_cost - d.mean() < self._icp_ddist_thresh:
+                break
+            prev_cost = d.mean()
+
+            p_Om = self._point_kd_tree.data[i]
+
+            p_Ombar = p_Om.mean(axis=0)
+            p_sbar = p_s.mean(axis=0)
+            W = (p_Om - p_Ombar).T @ (p_s - p_sbar)
+
+            U, _, Vh = np.linalg.svd(W)
+            D = np.zeros((3, 3))
+            D[range(3), range(3)] = [1, 1, np.linalg.det(U @ Vh)]
+
+            R_star = U @ D @ Vh
+            p_star = p_Ombar - R_star @ p_sbar
+            X_star = RigidTransform(RotationMatrix(R_star), p_star)
+
+            p_s = (X_star @ p_s.T).T
+            X = X_star @ X
+        self._meshcat.SetTransform("obj_transform", X.inverse())
+        self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.005), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
+        self._meshcat.SetTransform(f"PredTrajSpheres/{pred_traj_calls}", X.inverse())
 
     # Michael added this function to test connecting the two leafsystems
     def CreateOutput(self, context, output):
