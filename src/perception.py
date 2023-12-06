@@ -4,8 +4,8 @@ Output ports:
  - A downsampled PointCloud object (containing just the object) in Object frame
 """
 
-from dataclasses import dataclass
-from typing import Optional, Tuple, List
+from collections import deque
+from typing import Optional, List, Tuple
 from pydrake.all import (
     AbstractValue,
     Trajectory,
@@ -39,43 +39,7 @@ import itertools
 import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
 from manipulation.meshcat_utils import AddMeshcatTriad
-
-@dataclass
-class ObjectTrajectory:
-    x: Tuple[np.float32, np.float32, np.float32]
-    y: Tuple[np.float32, np.float32, np.float32]
-    z: Tuple[np.float32, np.float32, np.float32]
-
-    @staticmethod
-    def _solve_single_traj(
-            a: np.float32,
-            v1: np.float32,
-            t1: np.float32,
-            v2: np.float32,
-            t2: np.float32
-        ) -> npt.NDArray[np.float32]:
-        return (a, *np.linalg.solve([[t1, 1], [t2, 2]], [v1 - a * t1 ** 2, v2 - a * t2 ** 2]))
-
-    @staticmethod
-    def CalculateTrajectory(
-            p1: npt.NDArray[np.float32],
-            t1: np.float32,
-            p2: npt.NDArray[np.float32],
-            t2: np.float32,
-            g: np.float32 = 9.81,
-        ) -> "ObjectTrajectory":
-        return ObjectTrajectory(
-            ObjectTrajectory._solve_single_traj(0, p1[0], t1, p2[0], t2),
-            ObjectTrajectory._solve_single_traj(0, p1[1], t1, p2[1], t2),
-            ObjectTrajectory._solve_single_traj(-g, p1[2], t1, p2[2], t2)
-        )
-
-    def value(self, t: np.float32) -> npt.NDArray[np.float32]:
-        return [
-            self.x[0] * t ** 2 + self.x[1] * t + self.x[2],
-            self.y[0] * t ** 2 + self.y[1] * t + self.y[2],
-            self.z[0] * t ** 2 + self.z[1] * t + self.z[2],
-        ]
+from utils import ObjectTrajectory
 
 group_idx = 0
 def add_cameras(
@@ -264,10 +228,12 @@ class TrajectoryPredictor(CameraBackedSystem):
             cameras: List[RgbdSensor],
             camera_transforms: List[RigidTransform],
             pred_thresh: int,
+            ransac_iters: int,
+            ransac_thresh: np.float32,
+            ransac_window: int,
             thrown_model_name: str,
             plant: MultibodyPlant,
             meshcat: Optional[Meshcat] = None,
-            icp_ddist_thresh: float = 1e-3
         ):
         super().__init__(
             cameras=cameras,
@@ -279,26 +245,28 @@ class TrajectoryPredictor(CameraBackedSystem):
         )
 
         self._point_kd_tree = None
-        self._icp_ddist_thresh = icp_ddist_thresh
-        AddMeshcatTriad(self._meshcat, "obj_transform")
+        self._ransac_iters = ransac_iters
+        self._ransac_thresh = ransac_thresh
+        self._ransac_window = ransac_window
+        # AddMeshcatTriad(self._meshcat, "obj_transform")
 
-        # Saved previous poses
-        self._poses_state_index = self.DeclareAbstractState(AbstractValue.Make([0.0, 0.0, 0.0]))
-
+        # Input port for object point cloud for ICP
         self._obj_point_cloud_input = self.DeclareAbstractInputPort(
             "obj_point_cloud",
             AbstractValue.Make(PointCloud())
         )
 
-        # Update Event
-        self.DeclarePeriodicPublishEvent(0.01, 0.12, self.PredictTrajectory)
+        # Saved previous poses
+        self._poses_state = self.DeclareAbstractState(AbstractValue.Make(deque([(RigidTransform(), 0)])))
+        self._traj_state = self.DeclareAbstractState(AbstractValue.Make(ObjectTrajectory()))
 
-        # Michael commented out `lambda c, o: None` and added `self.CreateOutput`
+        # Update Event
+        self.DeclarePeriodicPublishEvent(0.01, 0.15, self.PredictTrajectory)
+
         port = self.DeclareAbstractOutputPort(
             "object_trajectory",
-            lambda: AbstractValue.Make(PiecewisePolynomial()),
-            # lambda c, o: None,
-            self.CreateOutput,
+            lambda: AbstractValue.Make(ObjectTrajectory()),
+            self.OutputTrajectory,
         )
 
     def _maybe_init_point_cloud(self, context: Context):
@@ -310,23 +278,32 @@ class TrajectoryPredictor(CameraBackedSystem):
     def point_cloud_input_port(self) -> OutputPort:
         return self._obj_point_cloud_input
 
-    def PredictTrajectory(self, context: Context):
-        global pred_traj_calls
-        pred_traj_calls += 1
-        self._maybe_init_point_cloud(context)
 
+    def PredictTrajectory(self, context: Context):
         scene_points = self.GetCameraPoints(context)
         self.PublishMeshcat(scene_points)
         if scene_points.shape[1] == 0:
             return
 
-        p_s = scene_points.T.astype(np.float64)
-        X = RigidTransform()
+        X = self._calculate_icp(context, scene_points.T)
+        self._update_ransac(context, X)
 
+        # global pred_traj_calls
+        # pred_traj_calls += 1
+
+        # self._meshcat.SetTransform("obj_transform", X)
+        # self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.005), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
+        # self._meshcat.SetTransform(f"PredTrajSpheres/{pred_traj_calls}", X)
+
+
+    def _calculate_icp(self, context: Context, p_s: npt.NDArray[np.float32]) -> RigidTransform:
+        self._maybe_init_point_cloud(context)
+
+        X = RigidTransform()
         prev_cost = np.inf
         while True:
             d, i = self._point_kd_tree.query(p_s)
-            if prev_cost - d.mean() < self._icp_ddist_thresh:
+            if np.allclose(prev_cost, d.mean()):
                 break
             prev_cost = d.mean()
 
@@ -346,14 +323,47 @@ class TrajectoryPredictor(CameraBackedSystem):
 
             p_s = (X_star @ p_s.T).T
             X = X_star @ X
-        self._meshcat.SetTransform("obj_transform", X.inverse())
-        self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.005), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
-        self._meshcat.SetTransform(f"PredTrajSpheres/{pred_traj_calls}", X.inverse())
+        return X.inverse()
 
-    # Michael added this function to test connecting the two leafsystems
-    def CreateOutput(self, context, output):
-        t = 0
-        test_obj_traj = PiecewisePolynomial.FirstOrderHold(
-                    [t, t + 1],  # Time knots
-                    np.array([[-1, 0.65], [-1, 0], [0.75, 0.75], [0, 0], [0, 0], [0, 0], [1, 1]])
-                    )
+    def _update_ransac(self, context: Context, X: RigidTransform):
+        poses_state = context.get_abstract_state(self._poses_state)
+        poses = poses_state.get_mutable_value()
+        poses.appendleft((X, context.get_time()))
+        if len(poses) > self._ransac_window:
+            poses.pop()
+
+        # context.SetAbstractState(self._poses_state, poses)
+        if len(poses) == 1:
+            context.SetAbstractState(self._traj_state, ObjectTrajectory.CalculateTrajectory(
+                X, 0, X, context.get_time()
+            ))
+            return
+
+        best_match_count = 0
+        best_match_cost = 0
+        best_traj = ObjectTrajectory()
+        for _ in range(self._ransac_iters):
+            i, j = np.random.choice(len(poses), size=2, replace=False)
+            traj_guess = ObjectTrajectory.CalculateTrajectory(*poses[i], *poses[j])
+
+            dists = np.array([np.linalg.norm(
+                        traj_guess.value(t).translation() - pose.translation()
+                     ) for pose, t in poses])
+            matches = dists < self._ransac_thresh
+            match_count = matches.sum()
+            match_cost = dists[matches].sum()
+
+            if match_count > best_match_count or (match_count == best_match_count and match_cost < best_match_cost):
+                best_traj = traj_guess
+                best_match_count = match_count
+                best_match_cost = match_cost
+
+        # for t in np.linspace(0, 2, 400):
+        #     self._meshcat.SetObject(f"RansacSpheres/{t}", Sphere(0.01), Rgba(0.2, 0.2, 1, 1))
+        #     self._meshcat.SetTransform(f"RansacSpheres/{t}", RigidTransform(best_traj.value(t)))
+
+        # print(f"best_match_count {best_match_count}")
+        context.SetAbstractState(self._traj_state, best_traj)
+
+    def OutputTrajectory(self, context, output):
+        output.set_value(context.get_abstract_state(self._traj_state))
