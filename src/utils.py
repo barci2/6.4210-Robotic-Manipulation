@@ -145,3 +145,10 @@ class ObjectTrajectory:
             self.y[0] * t ** 2 + self.y[1] * t + self.y[2],
             self.z[0] * t ** 2 + self.z[1] * t + self.z[2],
         ])
+    
+    def EvalDerivative(self, t: np.float32) -> npt.NDArray[np.float32]:
+        return np.array([
+            self.x[0] * t + self.x[1],
+            self.y[0] * t + self.y[1],
+            self.z[0] * t + self.z[1]
+        ])

@@ -237,8 +237,7 @@ class GraspSelector(LeafSystem):
         distance_obj_pc_centroid_to_X_OG_y_axis = np.linalg.norm(obj_pc_centroid_relative_to_X_OG - projection_obj_pc_centroid_relative_to_X_OG_onto_X_OG_y_axis_vector)
 
         # Transform the grasp pose from object frame to world frame
-        obj_pos = self.obj_traj.value(t)
-        X_WO = RigidTransform(np.eye(3), obj_pos)  # (3,) np array containing x,y,z (ignoring rotation for now)
+        X_WO = self.obj_traj.value(t)
         X_WG = X_WO @ X_OG
 
         # Add cost associated with whether X_WG's y-axis points away from iiwa (which is what we want)
@@ -349,6 +348,12 @@ class GraspSelector(LeafSystem):
         obj_pc = self.get_input_port(0).Eval(context).VoxelizedDownSample(voxel_size=0.0075)
         obj_traj = self.get_input_port(1).Eval(context)
 
+        if (obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
+            print("received default traj")
+            return
+
+        print(obj_traj)
+
         self.meshcat.SetObject("cloud", obj_pc)
 
         obj_pc_centroid = np.mean(obj_pc.xyzs(), axis=1)  # column-wise mean of 3xN np array of points
@@ -359,14 +364,16 @@ class GraspSelector(LeafSystem):
         search_times = np.linspace(0.5, 1, 20)  # assuming first half of trajectory is definitely outside of iiwa's work envelope
         # Forward search to find the first time that the object is in iiwa's work envelope
         for t in search_times:
-            obj_pos = obj_traj.value(t)  # (3) np array containing x,y,z
+            obj_pose = obj_traj.value(t)
+            obj_pos = obj_pose.translation()  # (3,) np array containing x,y,z
             obj_dist_from_iiwa_squared = obj_pos[0]**2 + obj_pos[1]**2
             # Object is between 420-750mm from iiwa's center in XY plane
             if obj_dist_from_iiwa_squared > 0.42**2 and obj_dist_from_iiwa_squared < 0.75**2:
                 self.obj_reachable_start_t = t
         # Backward search to find last time
         for t in search_times[::-1]:
-            obj_pos = obj_traj.value(t)  # (3) np array containing x,y,z
+            obj_pose = obj_traj.value(t)
+            obj_pos = obj_pose.translation()  # (3,) np array containing x,y,z
             obj_dist_from_iiwa_squared = obj_pos[0]**2 + obj_pos[1]**2
             # Object is between 420-750mm from iiwa's center in XY plane
             if obj_dist_from_iiwa_squared > 0.42**2 and obj_dist_from_iiwa_squared < 0.75**2:
@@ -392,7 +399,7 @@ class GraspSelector(LeafSystem):
         This ensures the gripper doesn't try to grab an edge of the object.
         """
         min_cost = float('inf')
-        min_cost_grasp = None
+        min_cost_grasp = None  # RigidTransform
         for grasp, grasp_cost in grasp_candidates.items():
 
             if grasp_cost < min_cost:
@@ -400,8 +407,8 @@ class GraspSelector(LeafSystem):
                 min_cost_grasp = grasp
 
             # draw all grasp candidates
-            self.draw_grasp_candidate(grasp_candidates[i], prefix="gripper" + str(i))
+            self.draw_grasp_candidate(grasp, prefix="gripper " + str(time.time()))
 
         self.draw_grasp_candidate(min_cost_grasp, prefix="gripper_best")
-
-        output.set_value(min_cost_grasp)
+        
+        output.set_value({min_cost_grasp, obj_catch_t})

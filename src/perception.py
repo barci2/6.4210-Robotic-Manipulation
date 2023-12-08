@@ -333,10 +333,12 @@ class TrajectoryPredictor(CameraBackedSystem):
             poses.pop()
 
         # context.SetAbstractState(self._poses_state, poses)
-        if len(poses) == 1:
-            context.SetAbstractState(self._traj_state, ObjectTrajectory.CalculateTrajectory(
-                X, 0, X, context.get_time()
-            ))
+        # if len(poses) == 1:
+        #     context.SetAbstractState(self._traj_state, ObjectTrajectory.CalculateTrajectory(
+        #         X, 0, X, context.get_time()
+        #     ))
+        #     return
+        if len(poses) <= 1:
             return
 
         best_match_count = 0
@@ -366,4 +368,4 @@ class TrajectoryPredictor(CameraBackedSystem):
         context.SetAbstractState(self._traj_state, best_traj)
 
     def OutputTrajectory(self, context, output):
-        output.set_value(context.get_abstract_state(self._traj_state))
+        output.set_value(context.get_abstract_state(self._traj_state).get_value())

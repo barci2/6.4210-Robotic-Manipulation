@@ -54,7 +54,7 @@ def build_post_catch_trajectory(plant, plant_context, plant_autodiff, world_fram
         plant.GetVelocityLowerLimits(), plant.GetVelocityUpperLimits()
     )
 
-    trajopt.AddDurationConstraint(0.5, 1)
+    trajopt.AddDurationConstraint(0, 1)
 
     # start constraint
     start_constraint = PositionConstraint(
@@ -86,7 +86,7 @@ def build_post_catch_trajectory(plant, plant_context, plant_autodiff, world_fram
     )
     trajopt.AddPathPositionConstraint(start_constraint, 0)
     trajopt.AddPathPositionConstraint(start_orientation_constraint, 0)
-    trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 1)
+    trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
     prog.AddQuadraticErrorCost(
         np.eye(num_q), q0, trajopt.control_points()[:, 0]
     )
@@ -162,7 +162,7 @@ def add_constraints(plant,
                     q0, 
                     obj_traj, 
                     obj_catch_t,
-                    duration_cost=50.0,
+                    duration_cost=10.0,
                     duration_constraint = -1,
                     acceptable_pos_err=0.0,
                     theta_bound = 0.05,
@@ -374,8 +374,6 @@ def motion_test(original_plant, meshcat, obj_traj, obj_catch_t):
 
     final_traj = trajopt_refined.ReconstructTrajectory(result)  # BSplineTrajectory
     final_traj_end_time = final_traj.end_time()
-
-    # return final_traj
 
     obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,1) np array
     post_catch_traj = build_post_catch_trajectory(plant, plant_context, plant_autodiff, world_frame, gripper_frame, X_WGoal, obj_vel_at_catch, final_traj_end_time)

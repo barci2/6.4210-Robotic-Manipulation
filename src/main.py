@@ -4,6 +4,7 @@ from pydrake.all import (
     Simulator,
     ModelInstanceIndex,
     PiecewisePolynomial,
+    PortSwitch,
     TrajectorySource,
     RigidTransform
 )
@@ -126,28 +127,51 @@ builder.Connect(obj_point_cloud_system.GetOutputPort("point_cloud"), grasp_selec
 motion_planner = builder.AddSystem(MotionPlanner(plant, meshcat))
 builder.Connect(grasp_selector.GetOutputPort("grasp_selection"), motion_planner.GetInputPort("grasp_selection"))
 builder.Connect(station.GetOutputPort("body_poses"), motion_planner.GetInputPort("current_gripper_pose"))
-builder.Connect(motion_planner.GetOutputPort("wsg_position"), station.GetInputPort("wsg.position"))
+builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), motion_planner.GetInputPort("object_trajectory"))
 
-# linear path for testing
-t = 0
-test_obj_traj = PiecewisePolynomial.FirstOrderHold(
-            [t, t + 1],  # Time knots
-            np.array([[-1, 0.55], [-1, 0], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
-            )
+# Motion Testing
+# t = 0
+# test_obj_traj = PiecewisePolynomial.FirstOrderHold(
+#             [t, t + 1],  # Time knots
+#             np.array([[-1, 0.55], [-1, 0], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
+#             )
 
-start = time.time()
-q_traj = motion_test(plant, meshcat, test_obj_traj, 1)
-print(f"Time to perform traj opt: {time.time() - start}")
+# start = time.time()
+# q_traj = motion_test(plant, meshcat, test_obj_traj, 1)
+# print(f"Time to perform traj opt: {time.time() - start}")
+
+
+### Calculate trajectory
+q_traj = motion_planner.GetOutputPort("trajectory").Eval(motion_planner.GetMyMutableContextFromRoot(context))
 
 # Connect output of motion system to input of iiwa's controller
 q_traj_system = builder.AddSystem(TrajectorySource(q_traj))
 builder.Connect(q_traj_system.get_output_port(), station.GetInputPort("iiwa.position"))
+
+# # Port Switch to switch from stationary trajectory to catching trajectory
+# switch = builder.AddSystem(PortSwitch(7))
+# builder.Connect(
+#     diff_ik.get_output_port(), switch.DeclareInputPort("diff_ik")  # For normal use case
+# )
+# builder.Connect(
+#     planner.GetOutputPort("iiwa_position_command"),  # for Planner's GoHome state
+#     switch.DeclareInputPort("position"),
+# )
+# builder.Connect(switch.get_output_port(), station.GetInputPort("iiwa.position"))
+# builder.Connect(
+#     planner.GetOutputPort("control_mode"),
+#     switch.get_port_selector_input_port(),
+# )
+
 
 ### Finalizing diagram setup
 diagram = builder.Build()
 context = diagram.CreateDefaultContext()
 diagram.set_name("object_catching_system")
 diagram_visualize_connections(diagram, "diagram.svg")
+
+q_traj = motion_planner.GetOutputPort("trajectory").Eval(motion_planner.GetMyMutableContextFromRoot(context))
+print(q_traj)
 
 
 ########################
@@ -173,9 +197,7 @@ body = plant.get_body(body_idx)
 plant.SetFreeBodyPose(plant_context, body, RigidTransform(point_cloud_cameras_center))
 obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableContextFromRoot(simulator_context))
 
-### Calculate trajectory
-# trajectory = motion_planner.GetOutputPort("trajectory").Eval(motion_planner.GetMyMutableContextFromRoot(context))
-# print(trajectory)
+
 
 throw_object(plant, plant_context, obj_name)
 
