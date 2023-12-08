@@ -80,7 +80,7 @@ def add_constraints(plant,
         X_WGoal.translation() - acceptable_pos_err,  # upper limit
         X_WGoal.translation() + acceptable_pos_err,  # lower limit
         gripper_frame,
-        [0, 0, 0],
+        [0, 0, 0.1],
         plant_context,
     )
     goal_orientation_constraint = OrientationConstraint(
