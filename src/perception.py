@@ -40,42 +40,8 @@ import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
 from manipulation.meshcat_utils import AddMeshcatTriad
 
-@dataclass
-class ObjectTrajectory:
-    x: Tuple[np.float32, np.float32, np.float32]
-    y: Tuple[np.float32, np.float32, np.float32]
-    z: Tuple[np.float32, np.float32, np.float32]
+from utils import ObjectTrajectory
 
-    @staticmethod
-    def _solve_single_traj(
-            a: np.float32,
-            v1: np.float32,
-            t1: np.float32,
-            v2: np.float32,
-            t2: np.float32
-        ) -> npt.NDArray[np.float32]:
-        return (a, *np.linalg.solve([[t1, 1], [t2, 2]], [v1 - a * t1 ** 2, v2 - a * t2 ** 2]))
-
-    @staticmethod
-    def CalculateTrajectory(
-            p1: npt.NDArray[np.float32],
-            t1: np.float32,
-            p2: npt.NDArray[np.float32],
-            t2: np.float32,
-            g: np.float32 = 9.81,
-        ) -> "ObjectTrajectory":
-        return ObjectTrajectory(
-            ObjectTrajectory._solve_single_traj(0, p1[0], t1, p2[0], t2),
-            ObjectTrajectory._solve_single_traj(0, p1[1], t1, p2[1], t2),
-            ObjectTrajectory._solve_single_traj(-g, p1[2], t1, p2[2], t2)
-        )
-
-    def value(self, t: np.float32) -> npt.NDArray[np.float32]:
-        return [
-            self.x[0] * t ** 2 + self.x[1] * t + self.x[2],
-            self.y[0] * t ** 2 + self.y[1] * t + self.y[2],
-            self.z[0] * t ** 2 + self.z[1] * t + self.z[2],
-        ]
 
 group_idx = 0
 def add_cameras(
@@ -291,12 +257,12 @@ class TrajectoryPredictor(CameraBackedSystem):
         )
 
         # Update Event
-        self.DeclarePeriodicPublishEvent(0.01, 0.12, self.PredictTrajectory)
+        self.DeclarePeriodicPublishEvent(0.1, 0.12, self.PredictTrajectory)
 
         # Michael commented out `lambda c, o: None` and added `self.CreateOutput`
         port = self.DeclareAbstractOutputPort(
             "object_trajectory",
-            lambda: AbstractValue.Make(PiecewisePolynomial()),
+            lambda: AbstractValue.Make(ObjectTrajectory()),
             # lambda c, o: None,
             self.CreateOutput,
         )
@@ -352,8 +318,5 @@ class TrajectoryPredictor(CameraBackedSystem):
 
     # Michael added this function to test connecting the two leafsystems
     def CreateOutput(self, context, output):
-        t = 0
-        test_obj_traj = PiecewisePolynomial.FirstOrderHold(
-                    [t, t + 1],  # Time knots
-                    np.array([[-1, 0.65], [-1, 0], [0.75, 0.75], [0, 0], [0, 0], [0, 0], [1, 1]])
-                    )
+        obj_traj = ObjectTrajectory((0,-3,5), (0,-3,5), (-9.81/2,4,0.75))
+        output.set_value(obj_traj)

@@ -15,6 +15,7 @@ import time
 from utils import (
     diagram_visualize_connections,
     throw_object,
+    ObjectTrajectory
 )
 from perception import PointCloudGenerator, TrajectoryPredictor, add_cameras
 
@@ -29,7 +30,7 @@ scenario_file = "data/scenario.yaml"
 thrown_obj_prefix = "obj"
 this_drake_module_name = "cwd"
 point_cloud_cameras_center = [0, 0, 100]
-simulator_runtime = 3
+simulator_runtime = 2
 
 np.random.seed(seed)
 
@@ -121,7 +122,8 @@ builder.Connect(obj_point_cloud_system.GetOutputPort("point_cloud"), grasp_selec
 ### Motion Planner
 motion_planner = builder.AddSystem(MotionPlanner(plant, meshcat))
 builder.Connect(grasp_selector.GetOutputPort("grasp_selection"), motion_planner.GetInputPort("grasp_selection"))
-
+builder.Connect(station.GetOutputPort("body_poses"), motion_planner.GetInputPort("current_gripper_pose"))
+builder.Connect(motion_planner.GetOutputPort("wsg_position"), station.GetInputPort("wsg.position"))
 
 # linear path for testing
 t = 0
@@ -136,9 +138,7 @@ print(f"Time to perform traj opt: {time.time() - start}")
 
 # Connect output of motion system to input of iiwa's controller
 q_traj_system = builder.AddSystem(TrajectorySource(q_traj))
-builder.Connect(
-    q_traj_system.get_output_port(), station.GetInputPort("iiwa.position")
-)
+builder.Connect(q_traj_system.get_output_port(), station.GetInputPort("iiwa.position"))
 
 ### Finalizing diagram setup
 diagram = builder.Build()
@@ -146,9 +146,6 @@ context = diagram.CreateDefaultContext()
 diagram.set_name("object_catching_system")
 diagram_visualize_connections(diagram, "diagram.svg")
 
-### Calculate trajectory
-# trajectory = motion_planner.GetOutputPort("trajectory").Eval(motion_planner.GetMyMutableContextFromRoot(context))
-# print(trajectory)
 
 ########################
 ### Simulation Setup ###
@@ -158,6 +155,14 @@ simulator_context = simulator.get_mutable_context()
 station_context = station.GetMyMutableContextFromRoot(simulator_context)
 plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
 
+# print(station.GetOutputPort("body_poses").Eval(station_context)[plant.GetBodyByName("body", plant.GetModelInstanceByName("wsg")).index()])
+
+
+### Opening the gripper
+# station.GetInputPort("iiwa.position").FixValue(station_context, np.zeros(7)) # TESTING
+station.GetInputPort("wsg.position").FixValue(station_context, [1]) # TESTING
+
+
 ### Capturing the point cloud for the robot
 obj = plant.GetModelInstanceByName(obj_name)
 body_idx = plant.GetBodyIndices(obj)[0]
@@ -165,12 +170,12 @@ body = plant.get_body(body_idx)
 plant.SetFreeBodyPose(plant_context, body, RigidTransform(point_cloud_cameras_center))
 obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableContextFromRoot(simulator_context))
 
-
-### Opening the gripper
-# station.GetInputPort("iiwa.position").FixValue(station_context, np.zeros(7)) # TESTING
-station.GetInputPort("wsg.position").FixValue(station_context, [1]) # TESTING
+### Calculate trajectory
+# trajectory = motion_planner.GetOutputPort("trajectory").Eval(motion_planner.GetMyMutableContextFromRoot(context))
+# print(trajectory)
 
 throw_object(plant, plant_context, obj_name)
+
 
 # scene_graph_context = scene_graph.GetMyMutableContextFromRoot(simulator_context) # TESTING
 # query_object = scene_graph.get_query_output_port().Eval(scene_graph_context) # TESTING

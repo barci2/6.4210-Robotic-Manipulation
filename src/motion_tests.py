@@ -44,6 +44,7 @@ def add_constraints(plant,
                     obj_traj, 
                     obj_catch_t,
                     duration_cost=50.0,
+                    duration_constraint = -1,
                     acceptable_pos_err=0.0,
                     theta_bound = 0.05,
                     acceptable_vel_err=0.05):
@@ -52,7 +53,10 @@ def add_constraints(plant,
     """
     trajopt.AddDurationCost(duration_cost)  # increase to make iiwa faster
 
-    trajopt.AddDurationConstraint(0.5, 50)
+    if (duration_constraint == -1):
+        trajopt.AddDurationConstraint(0.5, 50)
+    else:
+        trajopt.AddDurationConstraint(duration_constraint, duration_constraint)
 
     # start constraint
     start_constraint = PositionConstraint(
@@ -76,7 +80,7 @@ def add_constraints(plant,
         X_WGoal.translation() - acceptable_pos_err,  # upper limit
         X_WGoal.translation() + acceptable_pos_err,  # lower limit
         gripper_frame,
-        [0, 0.1, 0],
+        [0, 0, 0],
         plant_context,
     )
     goal_orientation_constraint = OrientationConstraint(
@@ -164,10 +168,10 @@ def motion_test(original_plant, meshcat, obj_traj, obj_catch_t):
     # print(f"X_WStart: {X_WStart}")
     # print(f"X_WGoal: {X_WGoal}")
 
-    AddMeshcatTriad(meshcat, "start", X_PT=X_WStart, opacity=0.5)
-    meshcat.SetTransform("start", X_WStart)
-    AddMeshcatTriad(meshcat, "goal", X_PT=X_WGoal, opacity=0.5)
-    meshcat.SetTransform("goal", X_WGoal)
+    AddMeshcatTriad(meshcat, "motion_test_start", X_PT=X_WStart, opacity=0.5)
+    meshcat.SetTransform("motion_test_start", X_WStart)
+    AddMeshcatTriad(meshcat, "motion_test_goal", X_PT=X_WGoal, opacity=0.5)
+    meshcat.SetTransform("motion_test_goal", X_WGoal)
 
     num_q = plant.num_positions()  # =7 (all of iiwa's joints)
     q0 = plant.GetPositions(plant_context)
@@ -203,6 +207,7 @@ def motion_test(original_plant, meshcat, obj_traj, obj_catch_t):
                                            obj_traj, 
                                            obj_catch_t,
                                            duration_cost=1.0,
+                                           duration_constraint=-1,
                                            acceptable_pos_err=0.4,
                                            theta_bound = 0.5,
                                            acceptable_vel_err=3.0)
@@ -233,7 +238,8 @@ def motion_test(original_plant, meshcat, obj_traj, obj_catch_t):
                                            num_q, 
                                            q0, 
                                            obj_traj, 
-                                           obj_catch_t)
+                                           obj_catch_t,
+                                           duration_constraint=1)
     # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
     trajopt_refined.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 

@@ -1,7 +1,6 @@
 from pydrake.all import (
     AbstractValue,
     Concatenate,
-    Trajectory,
     LeafSystem,
     PointCloud,
     AddMultibodyPlantSceneGraph,
@@ -27,18 +26,8 @@ import time
 import numpy as np
 from scipy.spatial import KDTree
 
+from utils import ObjectTrajectory
 
-class TrajectoryWrapper():
-    def __init__(self):
-        # Bare constructor that is used when defining the type of the AbstractInputPort
-        self.trajectory = None
-
-    def add_trajectory_object(self, trajectory):
-        # trajectory is a drake Trajectory object
-        self.trajectory = trajectory
-
-    def value(self, t):
-        return self.trajectory.value(t)
 
 class GraspSelector(LeafSystem):
     """
@@ -50,7 +39,7 @@ class GraspSelector(LeafSystem):
         LeafSystem.__init__(self)
 
         obj_pc = AbstractValue.Make(PointCloud())
-        obj_traj = AbstractValue.Make(TrajectoryWrapper())
+        obj_traj = AbstractValue.Make(ObjectTrajectory())
         self.DeclareAbstractInputPort("object_pc", obj_pc)
         self.DeclareAbstractInputPort("object_trajectory", obj_traj)
         
@@ -67,12 +56,10 @@ class GraspSelector(LeafSystem):
         self.meshcat = meshcat
 
 
-    def draw_grasp_candidate(self, X_G, prefix="gripper", draw_frames=True, refresh=False):
+    def draw_grasp_candidate(self, X_G, prefix="gripper"):
         """
         Helper function to visualize grasp.
         """
-        if refresh:
-            self.meshcat.Delete()
         builder = DiagramBuilder()
         plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
         parser = Parser(plant)
@@ -81,8 +68,7 @@ class GraspSelector(LeafSystem):
             "package://manipulation/schunk_wsg_50_welded_fingers.sdf"
         )
         plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("body"), X_G)
-        if draw_frames:
-            AddMultibodyTriad(plant.GetFrameByName("body"), scene_graph)
+        AddMultibodyTriad(plant.GetFrameByName("body"), scene_graph)
         plant.Finalize()
 
         params = MeshcatVisualizerParams()
@@ -99,23 +85,23 @@ class GraspSelector(LeafSystem):
         """
         TODO: Speed up this function.
         """
-        return False
-        # plant_context = self.plant.GetMyContextFromRoot(self.context)
-        # scene_graph_context = self.scene_graph.GetMyContextFromRoot(self.context)
-        # self.plant.SetFreeBodyPose(plant_context, self.plant.GetBodyByName("body"), X_G)
-
-        # query_object = self.scene_graph.get_query_output_port().Eval(
-        #     scene_graph_context
-        # )
-
-        # for pt in obj_pc.xyzs().T:
-        #     distances = query_object.ComputeSignedDistanceToPoint(pt)
-        #     for body_index in range(len(distances)):
-        #         distance = distances[body_index].distance
-        #         if distance < 0:
-        #             return True  # Collision
-
         # return False
+        plant_context = self.plant.GetMyContextFromRoot(self.context)
+        scene_graph_context = self.scene_graph.GetMyContextFromRoot(self.context)
+        self.plant.SetFreeBodyPose(plant_context, self.plant.GetBodyByName("body"), X_G)
+
+        query_object = self.scene_graph.get_query_output_port().Eval(
+            scene_graph_context
+        )
+
+        for pt in obj_pc.xyzs().T:
+            distances = query_object.ComputeSignedDistanceToPoint(pt)
+            for body_index in range(len(distances)):
+                distance = distances[body_index].distance
+                if distance < 0:
+                    return True  # Collision
+
+        return False
 
 
     def compute_darboux_frame(self, index, obj_pc, kdtree, ball_radius=0.002, max_nn=50):
@@ -130,6 +116,8 @@ class GraspSelector(LeafSystem):
         - ball_radius (float): ball_radius used for nearest-neighbors search
         - max_nn (int): maximum number of points considered in nearest-neighbors search.
         """
+        print("in compute_darboux")
+
         points = obj_pc.xyzs()  # 3xN np array of points
         normals = obj_pc.normals()  # 3xN np array of normals
 
@@ -158,7 +146,7 @@ class GraspSelector(LeafSystem):
         # This works bc rotation matrices are, by definition, 3 horizontally stacked orthonormal columns
         # Also, we choose the order [v2 v1 v3] bc v1 (with largest eigen value) corresponds to y-axis, v2 (with 2nd largest eigen value) corresponds to major axis of curvature (x-axis), and v3 (smallest eignvalue) correponds to minor axis of curvature (z-axis)
         R = np.hstack((eig_vecs[:,1:2], eig_vecs[:,0:1], eig_vecs[:,2:3]))  # need to reshape vectors to col vectors
-        # print(R)
+        print(R)
 
         # 6. Check if matrix is improper (is actually both a rotation and reflection), if so, fix it
         if np.linalg.det(R) < 0:  # if det is neg, this means rot matrix is improper
@@ -166,6 +154,8 @@ class GraspSelector(LeafSystem):
 
         #7. Create a rigid transform with the rotation of the normal and position of the point in the PC
         X_WF = RigidTransform(RotationMatrix(R), points[:,index])  # modify here.
+
+        print("done with darboux")
 
         return X_WF
 
@@ -229,70 +219,7 @@ class GraspSelector(LeafSystem):
         return is_nonempty
 
 
-
-    def compute_candidate_grasps(self, obj_pc, candidate_num=10, random_seed=5):
-        """
-        Args:
-            - obj_pc (PointCloud object): pointcloud of the object.
-            - candidate_num (int) : number of desired candidates.
-        Return:
-            - candidate_lst (list of drake RigidTransforms) : candidate list of grasps.
-        """
-
-        # Constants for random variation
-        x_min = -0.03
-        x_max = 0.03
-        phi_min = -np.pi / 3
-        phi_max = np.pi / 3
-        # np.random.seed(random_seed)
-
-        # Build KD tree for the pointcloud.
-        kdtree = KDTree(obj_pc.xyzs().T)
-        ball_radius = 0.002
-
-        candidate_lst = []  # list of candidates, given by RigidTransforms.
-
-        def compute_candidate(idx, obj_pc, kdtree, ball_radius, x_min, x_max, phi_min, phi_max, candidate_lst_lock, candidate_lst):
-            X_WF = self.compute_darboux_frame(idx, obj_pc, kdtree, ball_radius)  # find Darboux frame of random point
-
-            # Compute random x-translation and z-rotation to modify gripper pose
-            # random_x = np.random.uniform(x_min, x_max)
-            # random_z_rot = np.random.uniform(phi_min, phi_max)
-            # X_WG = X_WF @ RigidTransform(RotationMatrix.MakeZRotation(random_z_rot), np.array([random_x, 0, 0]))
-
-            new_X_WG = X_WF @ RigidTransform(np.array([0, -0.05, 0]))  # Move grasper back by fixed amount
-
-            # check_collision takes most of the runtime
-            if (self.check_collision(obj_pc, new_X_WG) is not True) and self.check_nonempty(obj_pc, new_X_WG):  # no collision, and there is an object between fingers
-                with candidate_lst_lock:
-                    candidate_lst.append(new_X_WG)
-
-        import threading
-
-        threads = []
-        candidate_lst_lock = threading.Lock()
-        for i in range(candidate_num):
-            random_idx = np.random.randint(0, obj_pc.size())
-            t = threading.Thread(target=compute_candidate, args=(random_idx, 
-                                                                obj_pc, 
-                                                                kdtree, 
-                                                                ball_radius, 
-                                                                x_min, 
-                                                                x_max, 
-                                                                phi_min, 
-                                                                phi_max, 
-                                                                candidate_lst_lock, 
-                                                                candidate_lst))
-            threads.append(t)
-            t.start()
-
-        for t in threads:
-            t.join()
-
-        return candidate_lst
-
-
-    def grasp_cost(self, obj_pc_centroid, X_OG, t):
+    def compute_grasp_cost(self, obj_pc_centroid, X_OG, t):
         """
         Defines cost function that is used to pick best grasp sample.
 
@@ -310,10 +237,8 @@ class GraspSelector(LeafSystem):
         distance_obj_pc_centroid_to_X_OG_y_axis = np.linalg.norm(obj_pc_centroid_relative_to_X_OG - projection_obj_pc_centroid_relative_to_X_OG_onto_X_OG_y_axis_vector)
 
         # Transform the grasp pose from object frame to world frame
-        obj_pose_data = self.obj_traj.value(t)  # (7,1) vector containing x,y,z,q0,q1,q2,q3
-        obj_pose_quaterion = obj_pose_data[3:]
-        obj_pose_position = obj_pose_data[:3]
-        X_WO = RigidTransform(Quaternion(obj_pose_quaterion), obj_pose_position)
+        obj_pos = self.obj_traj.value(t)
+        X_WO = RigidTransform(np.eye(3), obj_pos)  # (3,) np array containing x,y,z (ignoring rotation for now)
         X_WG = X_WO @ X_OG
 
         # Add cost associated with whether X_WG's y-axis points away from iiwa (which is what we want)
@@ -351,11 +276,77 @@ class GraspSelector(LeafSystem):
         final_cost = 100*distance_obj_pc_centroid_to_X_OG_y_axis + angle + 5*alignment
 
         return final_cost
+
+
+    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=10, random_seed=5):
+        """
+        Args:
+            - obj_pc (PointCloud object): pointcloud of the object.
+            - candidate_num (int) : number of desired candidates.
+        Return:
+            - candidate_lst (list of drake RigidTransforms) : candidate list of grasps.
+        """
+
+        # Constants for random variation
+        x_min = -0.03
+        x_max = 0.03
+        phi_min = -np.pi / 3
+        phi_max = np.pi / 3
+        # np.random.seed(random_seed)
+
+        # Build KD tree for the pointcloud.
+        kdtree = KDTree(obj_pc.xyzs().T)
+        ball_radius = 0.002
+
+        candidate_lst = {}  # dict mapping candidates (given by RigidTransforms) to cost of that candidate
+
+        def compute_candidate(idx, obj_pc, kdtree, ball_radius, x_min, x_max, phi_min, phi_max, candidate_lst_lock, candidate_lst):
+            print("in compute_candidate")
+            X_WF = self.compute_darboux_frame(idx, obj_pc, kdtree, ball_radius)  # find Darboux frame of random point
+            print("computed darboux")
+
+            # Compute random x-translation and z-rotation to modify gripper pose
+            # random_x = np.random.uniform(x_min, x_max)
+            # random_z_rot = np.random.uniform(phi_min, phi_max)
+            # X_WG = X_WF @ RigidTransform(RotationMatrix.MakeZRotation(random_z_rot), np.array([random_x, 0, 0]))
+
+            new_X_WG = X_WF @ RigidTransform(np.array([0, -0.05, 0]))  # Move gripper back by fixed amount
+
+            print(f"self.check_nonempty(obj_pc, new_X_WG): {self.check_nonempty(obj_pc, new_X_WG)}")
+
+            # check_collision takes most of the runtime
+            if (self.check_collision(obj_pc, new_X_WG) is not True) and self.check_nonempty(obj_pc, new_X_WG):  # no collision, and there is an object between fingers
+                with candidate_lst_lock:
+                    candidate_lst[new_X_WG] = self.compute_grasp_cost(obj_pc_centroid, new_X_WG, obj_catch_t)
+
+        import threading
+
+        threads = []
+        candidate_lst_lock = threading.Lock()
+        for i in range(candidate_num):
+            random_idx = np.random.randint(0, obj_pc.size())
+            t = threading.Thread(target=compute_candidate, args=(random_idx, 
+                                                                obj_pc, 
+                                                                kdtree, 
+                                                                ball_radius, 
+                                                                x_min, 
+                                                                x_max, 
+                                                                phi_min, 
+                                                                phi_max, 
+                                                                candidate_lst_lock, 
+                                                                candidate_lst))
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+
+        return candidate_lst
     
 
     def SelectGrasp(self, context, output):
 
-        obj_pc = self.get_input_port(0).Eval(context)
+        obj_pc = self.get_input_port(0).Eval(context).VoxelizedDownSample(voxel_size=0.0075)
         obj_traj = self.get_input_port(1).Eval(context)
 
         self.meshcat.SetObject("cloud", obj_pc)
@@ -368,15 +359,15 @@ class GraspSelector(LeafSystem):
         search_times = np.linspace(0.5, 1, 20)  # assuming first half of trajectory is definitely outside of iiwa's work envelope
         # Forward search to find the first time that the object is in iiwa's work envelope
         for t in search_times:
-            obj_pos = obj_traj.value(t)[:3]  # (3,1) np array containing x,y,z
-            obj_dist_from_iiwa_squared = obj_pos[0][0]**2 + obj_pos[1][0]**2
+            obj_pos = obj_traj.value(t)  # (3) np array containing x,y,z
+            obj_dist_from_iiwa_squared = obj_pos[0]**2 + obj_pos[1]**2
             # Object is between 420-750mm from iiwa's center in XY plane
             if obj_dist_from_iiwa_squared > 0.42**2 and obj_dist_from_iiwa_squared < 0.75**2:
                 self.obj_reachable_start_t = t
         # Backward search to find last time
         for t in search_times[::-1]:
-            obj_pos = obj_traj.value(t)[:3]  # (3,1) np array containing x,y,z
-            obj_dist_from_iiwa_squared = obj_pos[0][0]**2 + obj_pos[1][0]**2
+            obj_pos = obj_traj.value(t)  # (3) np array containing x,y,z
+            obj_dist_from_iiwa_squared = obj_pos[0]**2 + obj_pos[1]**2
             # Object is between 420-750mm from iiwa's center in XY plane
             if obj_dist_from_iiwa_squared > 0.42**2 and obj_dist_from_iiwa_squared < 0.75**2:
                 self.obj_reachable_end_t = t
@@ -386,7 +377,7 @@ class GraspSelector(LeafSystem):
 
         start = time.time()
         grasp_candidates = self.compute_candidate_grasps(
-            obj_pc, candidate_num=20, random_seed=12
+            obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=10, random_seed=10
         )
         print(time.time() - start)
         print(f"grasp_candidates: {grasp_candidates}")
@@ -402,21 +393,15 @@ class GraspSelector(LeafSystem):
         """
         min_cost = float('inf')
         min_cost_grasp = None
-        for i in range(len(grasp_candidates)):
-            
-            grasp_cost = grasp_cost(obj_pc_centroid, grasp_candidates[i], obj_catch_t)
+        for grasp, grasp_cost in grasp_candidates.items():
 
             if grasp_cost < min_cost:
                 min_cost = grasp_cost
-                min_cost_grasp = {grasp_candidates[i], obj_catch_t}
+                min_cost_grasp = grasp
 
             # draw all grasp candidates
-            # draw_grasp_candidate(
-            #     grasp_candidates[i], prefix="gripper" + str(i), draw_frames=False
-            # )
+            self.draw_grasp_candidate(grasp_candidates[i], prefix="gripper" + str(i))
 
-        self.draw_grasp_candidate(
-            min_cost_grasp, prefix="gripper_best", draw_frames=False
-        )
+        self.draw_grasp_candidate(min_cost_grasp, prefix="gripper_best")
 
         output.set_value(min_cost_grasp)

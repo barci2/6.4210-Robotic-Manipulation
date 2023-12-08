@@ -24,6 +24,8 @@ from pydrake.all import (
 
 from manipulation.meshcat_utils import AddMeshcatTriad
 
+from utils import ObjectTrajectory
+
 
 class MotionPlanner(LeafSystem):
     """
@@ -37,17 +39,25 @@ class MotionPlanner(LeafSystem):
         grasp = AbstractValue.Make({RigidTransform(): 0})
         self.DeclareAbstractInputPort("grasp_selection", grasp)
 
+        current_gripper_pose = AbstractValue.Make([RigidTransform()])
+        self.DeclareAbstractInputPort("current_gripper_pose", current_gripper_pose)
+
         port = self.DeclareAbstractOutputPort(
             "trajectory",
             lambda: AbstractValue.Make(BsplineTrajectory()),
             self.compute_traj,
         )
         port.disable_caching_by_default()
+        self.DeclareVectorOutputPort("wsg_position", 1, self.compute_wsg_pos)
+
+        # self._traj_wsg_index = self.DeclareAbstractState(
+        #     AbstractValue.Make(PiecewisePolynomial())
+        # )
 
         self.original_plant = original_plant
         self.meshcat = meshcat
 
-    
+
     def add_constraints(self, 
                         plant, 
                         plant_context, 
@@ -62,14 +72,17 @@ class MotionPlanner(LeafSystem):
                         q0, 
                         obj_traj, 
                         obj_catch_t,
-                        duration_cost=50.0,
+                        duration_constraint=-1,
                         acceptable_pos_err=0.0,
                         theta_bound = 0.05,
                         acceptable_vel_err=0.05):
         """
         Relevant Constraints who have tunable acceptable error measurements.
         """
-        trajopt.AddDurationCost(duration_cost)  # increase to make iiwa faster
+        if (duration_constraint == -1):
+            trajopt.AddDurationConstraint(0.5, 50)
+        else:
+            trajopt.AddDurationConstraint(duration_constraint, duration_constraint)
 
         trajopt.AddDurationConstraint(0.5, 50)
 
@@ -95,7 +108,7 @@ class MotionPlanner(LeafSystem):
             X_WGoal.translation() - acceptable_pos_err,  # upper limit
             X_WGoal.translation() + acceptable_pos_err,  # lower limit
             gripper_frame,
-            [0, 0.1, 0],
+            [0, 0, 0],
             plant_context,
         )
         goal_orientation_constraint = OrientationConstraint(
@@ -146,10 +159,11 @@ class MotionPlanner(LeafSystem):
         obj_catch_t = grasp.values()[0]
 
         # TEMPORARY
-        obj_traj = PiecewisePolynomial.FirstOrderHold(
-            [t, t + 1],  # Time knots
-            np.array([[-1, 0.55], [-1, 0], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
-            )
+        obj_traj = ObjectTrajectory((0,-3,5), (0,-3,5), (-9.81/2,4,0.75))
+        # obj_traj = PiecewisePolynomial.FirstOrderHold(
+        #     [t, t + 1],  # Time knots
+        #     np.array([[-1, 0.55], [-1, 0], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
+        #     )
 
         self.original_plant_positions = self.original_plant.GetPositions(self.original_plant.CreateDefaultContext(), self.original_plant.GetModelInstanceByName("iiwa"))
 
@@ -178,18 +192,16 @@ class MotionPlanner(LeafSystem):
         # Plot spheres to visualize obj trajectory
         times = np.linspace(0, 1, 50)
         for t in times:
-            obj_pose_data = obj_traj.value(t)  # (7,1) vector containing x,y,z,q0,q1,q2,q3
-            obj_pose_quaterion = obj_pose_data[3:]
-            obj_pose_position = obj_pose_data[:3]
-            obj_pose = RigidTransform(Quaternion(obj_pose_quaterion), obj_pose_position)
+            obj_pos = obj_traj.value(t)
+            obj_pose = RigidTransform(np.eye(3), obj_pos)  # (3,) np array containing x,y,z (ignoring rotation for now)
             self.meshcat.SetObject(str(t), Sphere(0.005), Rgba(0.4, 1, 1, 1))
             self.meshcat.SetTransform(str(t), obj_pose)
 
         X_WStart = plant.CalcRelativeTransform(plant_context, world_frame, gripper_frame)  # robot current pose
-        obj_catch_point = obj_traj.value(obj_catch_t)  # (7,) np array
-        obj_catch_quaterion = obj_catch_point[3:]
-        obj_catch_position = obj_catch_point[:3]
-        X_WGoal = RigidTransform(Quaternion(obj_catch_quaterion), obj_catch_position)
+        obj_catch_pos = obj_traj.value(obj_catch_t)  # (3,) np array containing x,y,z (ignoring rotation for now)
+        X_WGoal = RigidTransform(np.eye(3), obj_catch_pos)
+
+
         # print(f"X_WStart: {X_WStart}")
         # print(f"X_WGoal: {X_WGoal}")
 
@@ -231,7 +243,7 @@ class MotionPlanner(LeafSystem):
                                             q0, 
                                             obj_traj, 
                                             obj_catch_t,
-                                            duration_cost=1.0,
+                                            duration_constraint=-1,
                                             acceptable_pos_err=0.4,
                                             theta_bound = 0.5,
                                             acceptable_vel_err=3.0)
@@ -262,7 +274,8 @@ class MotionPlanner(LeafSystem):
                                             num_q, 
                                             q0, 
                                             obj_traj, 
-                                            obj_catch_t)
+                                            obj_catch_t,
+                                            duration_constraint=obj_catch_t-plant_context.get_time())
         # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
         trajopt_refined.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
@@ -277,3 +290,19 @@ class MotionPlanner(LeafSystem):
 
         # return final_traj
         output.set_value(final_traj)
+
+    def compute_wsg_pos(self, context, output):
+        grasp = self.get_input_port(0).Eval(context)
+        X_WG_Grasp = grasp.keys()[0]
+        obj_catch_t = grasp.values()[0]
+
+        X_WG = self.get_input_port(1).Eval(context)[self.original_plant.GetBodyByName("body", self.original_plant.GetModelInstanceByName("wsg")).index()]
+
+        position_diff = np.linalg.norm(X_WG_Grasp.translation() - X_WG.translation())
+        rotation_diff = X_WG_Grasp.rotation().angular_distance(X_WG.rotation())
+
+        # If robot is in catching position, close grippers
+        if position_diff < 0.005 and rotation_diff < 0.1:  # 5mm, 5 deg
+            output.SetFromVector(np.array([0,0]))
+        else:
+            output.SetFromVector(np.array([1,1]))
