@@ -131,7 +131,7 @@ class MotionPlanner(LeafSystem):
             np.zeros((num_q, 1)), np.zeros((num_q, 1)), 0
         )
         # end with velocity equal to object's velocity at that moment
-        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,) np array
+        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,1) np array
         final_vel_constraint = SpatialVelocityConstraint(
             plant_auto_diff,
             plant_auto_diff.world_frame(),
