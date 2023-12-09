@@ -55,6 +55,7 @@ def add_cameras(
     ) -> Tuple[List[RgbdSensor], List[RigidTransform]]:
     global group_idx
     camera_config = CameraConfig()
+    camera_config.z_far=30
     camera_config.width = camera_width
     camera_config.height = camera_height
     scene_graph = station.GetSubsystemByName("scene_graph")
@@ -227,6 +228,7 @@ class TrajectoryPredictor(CameraBackedSystem):
             cameras: List[RgbdSensor],
             camera_transforms: List[RigidTransform],
             pred_thresh: int,
+            pred_samples_thresh: int,
             ransac_iters: int,
             ransac_thresh: np.float32,
             ransac_window: int,
@@ -244,6 +246,7 @@ class TrajectoryPredictor(CameraBackedSystem):
         )
 
         self._point_kd_tree = None
+        self._pred_samples_thresh = pred_samples_thresh
         self._ransac_iters = ransac_iters
         self._ransac_thresh = ransac_thresh
         self._ransac_window = ransac_window
@@ -255,12 +258,12 @@ class TrajectoryPredictor(CameraBackedSystem):
             AbstractValue.Make(PointCloud())
         )
 
-        # Saved previous posess
-        self._poses_state = self.DeclareAbstractState(AbstractValue.Make(deque([(RigidTransform(), 0)])))
+        # Saved previous poses
+        self._poses_state = self.DeclareAbstractState(AbstractValue.Make(deque()))
         self._traj_state = self.DeclareAbstractState(AbstractValue.Make(ObjectTrajectory()))
 
         # Update Event
-        self.DeclarePeriodicPublishEvent(0.01, 0.12, self.PredictTrajectory)
+        self.DeclarePeriodicPublishEvent(0.03, 0.05, self.PredictTrajectory)
 
         port = self.DeclareAbstractOutputPort(
             "object_trajectory",
@@ -287,12 +290,11 @@ class TrajectoryPredictor(CameraBackedSystem):
         X = self._calculate_icp(context, scene_points.T)
         self._update_ransac(context, X)
 
-        # global pred_traj_calls
-        # pred_traj_calls += 1
-
         # Visualize spheres for the data points that are used for prediction
         # self._meshcat.SetTransform("obj_transform", X)
-        self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.005), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
+        global pred_traj_calls
+        pred_traj_calls += 1
+        self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.02), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
         self._meshcat.SetTransform(f"PredTrajSpheres/{pred_traj_calls}", X)
 
 
@@ -338,7 +340,7 @@ class TrajectoryPredictor(CameraBackedSystem):
         #         X, 0, X, context.get_time()
         #     ))
         #     return
-        if len(poses) <= 1:
+        if len(poses) < max(self._pred_samples_thresh, 2):
             return
 
         best_match_count = 0
@@ -365,7 +367,6 @@ class TrajectoryPredictor(CameraBackedSystem):
             self._meshcat.SetObject(f"RansacSpheres/{t}", Sphere(0.01), Rgba(0.2, 0.2, 1, 1))
             self._meshcat.SetTransform(f"RansacSpheres/{t}", RigidTransform(best_traj.value(t)))
 
-        # print(f"best_match_count {best_match_count}")
         context.SetAbstractState(self._traj_state, best_traj)
 
     def OutputTrajectory(self, context, output):
