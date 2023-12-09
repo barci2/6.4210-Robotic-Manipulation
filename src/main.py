@@ -10,7 +10,9 @@ from pydrake.all import (
 )
 from manipulation.station import MakeHardwareStation, load_scenario
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
+matplotlib.use("tkagg")
 import os
 import time
 from utils import (
@@ -77,9 +79,10 @@ icp_cameras, icp_camera_transforms = add_cameras(
     camera_height=600,
     horizontal_num=8,
     vertical_num=5,
-    camera_distance=5,
+    camera_distance=3,
     cameras_center=[0, 0, 0]
 )
+
 point_cloud_cameras, point_cloud_camera_transforms = add_cameras(
     builder=builder,
     station=station,
@@ -192,6 +195,8 @@ obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableCont
 
 throw_object(plant, plant_context, obj_name)
 
+# plt.imshow(icp_cameras[17].depth_image_32F_output_port().Eval(icp_cameras[17].GetMyContextFromRoot(simulator_context)).data[::-1])
+# plt.show()
 
 # scene_graph_context = scene_graph.GetMyMutableContextFromRoot(simulator_context) # TESTING
 # query_object = scene_graph.get_query_output_port().Eval(scene_graph_context) # TESTING
@@ -200,7 +205,7 @@ throw_object(plant, plant_context, obj_name)
 ####################################
 ### Running Simulation & Meshcat ###
 ####################################
-simulator.set_target_realtime_rate(1.0)
+simulator.set_target_realtime_rate(0.1)
 simulator.set_publish_every_time_step(True)
 plt.show()
 
