@@ -82,8 +82,8 @@ def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str) -
     # Unlock joint so object is subject to gravity
     joint.Unlock(plant_context)
 
-    v_magnitude = np.random.uniform(5.0, 5.5)
-    angle_perturb = np.random.uniform(0.075, 0.1) * np.random.choice(
+    v_magnitude = np.random.uniform(6.0, 6.5)
+    angle_perturb = np.random.uniform(0.07, 0.09) * np.random.choice(
         [-1, 1]
     )  # must perturb by at least 0.1 rad to avoid throwing directly at iiwa
     # ensure the perturbation is applied such that it directs the obj away from iiwa

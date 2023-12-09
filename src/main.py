@@ -111,6 +111,7 @@ traj_pred_system = builder.AddSystem(TrajectoryPredictor(
     cameras=icp_cameras,
     camera_transforms=icp_camera_transforms,
     pred_thresh=5,
+    pred_samples_thresh=4,
     thrown_model_name=obj_name,
     ransac_iters=20,
     ransac_thresh=0.01,

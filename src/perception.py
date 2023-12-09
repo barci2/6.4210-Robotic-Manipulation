@@ -370,5 +370,4 @@ class TrajectoryPredictor(CameraBackedSystem):
         context.SetAbstractState(self._traj_state, best_traj)
 
     def OutputTrajectory(self, context, output):
-        print("OutputTrajectory (from perception.py)")
         output.set_value(context.get_abstract_state(self._traj_state).get_value())

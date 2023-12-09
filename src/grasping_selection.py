@@ -83,14 +83,32 @@ class GraspSelector(LeafSystem):
 
     def check_collision(self, obj_pc, X_G):
         """
-        TODO: Speed up this function.
-        """
-        # return False
-        plant_context = self.plant.GetMyContextFromRoot(self.context)
-        scene_graph_context = self.scene_graph.GetMyContextFromRoot(self.context)
-        self.plant.SetFreeBodyPose(plant_context, self.plant.GetBodyByName("body"), X_G)
+        TODO: Speed up this function. Setting up the diagram takes ~0.1 sec, 
+        actually computing SDF is also ~0.1 sec
 
-        query_object = self.scene_graph.get_query_output_port().Eval(
+        Builds a new MBP and diagram with just the object and WSG, and computes 
+        SDF to check if there is collision.
+        """
+        builder = DiagramBuilder()
+        plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
+        parser = Parser(plant)
+        ConfigureParser(parser)
+        parser.AddModelsFromUrl(
+            "package://manipulation/schunk_wsg_50_welded_fingers.sdf"
+        )
+        AddMultibodyTriad(plant.GetFrameByName("body"), scene_graph)
+        plant.Finalize()
+
+        # meshcat_vis = MeshcatVisualizer.AddToBuilder(builder, scene_graph, self.meshcat)
+
+        diagram = builder.Build()
+        context = diagram.CreateDefaultContext()
+
+        plant_context = plant.GetMyContextFromRoot(context)
+        scene_graph_context = scene_graph.GetMyContextFromRoot(context)
+        plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("body"), X_G)
+
+        query_object = scene_graph.get_query_output_port().Eval(
             scene_graph_context
         )
 
@@ -116,8 +134,6 @@ class GraspSelector(LeafSystem):
         - ball_radius (float): ball_radius used for nearest-neighbors search
         - max_nn (int): maximum number of points considered in nearest-neighbors search.
         """
-        print("in compute_darboux")
-
         points = obj_pc.xyzs()  # 3xN np array of points
         normals = obj_pc.normals()  # 3xN np array of normals
 
@@ -146,7 +162,6 @@ class GraspSelector(LeafSystem):
         # This works bc rotation matrices are, by definition, 3 horizontally stacked orthonormal columns
         # Also, we choose the order [v2 v1 v3] bc v1 (with largest eigen value) corresponds to y-axis, v2 (with 2nd largest eigen value) corresponds to major axis of curvature (x-axis), and v3 (smallest eignvalue) correponds to minor axis of curvature (z-axis)
         R = np.hstack((eig_vecs[:,1:2], eig_vecs[:,0:1], eig_vecs[:,2:3]))  # need to reshape vectors to col vectors
-        print(R)
 
         # 6. Check if matrix is improper (is actually both a rotation and reflection), if so, fix it
         if np.linalg.det(R) < 0:  # if det is neg, this means rot matrix is improper
@@ -154,8 +169,6 @@ class GraspSelector(LeafSystem):
 
         #7. Create a rigid transform with the rotation of the normal and position of the point in the PC
         X_WF = RigidTransform(RotationMatrix(R), points[:,index])  # modify here.
-
-        print("done with darboux")
 
         return X_WF
 
@@ -300,9 +313,7 @@ class GraspSelector(LeafSystem):
         candidate_lst = {}  # dict mapping candidates (given by RigidTransforms) to cost of that candidate
 
         def compute_candidate(idx, obj_pc, kdtree, ball_radius, x_min, x_max, phi_min, phi_max, candidate_lst_lock, candidate_lst):
-            print("in compute_candidate")
             X_WF = self.compute_darboux_frame(idx, obj_pc, kdtree, ball_radius)  # find Darboux frame of random point
-            print("computed darboux")
 
             # Compute random x-translation and z-rotation to modify gripper pose
             # random_x = np.random.uniform(x_min, x_max)
@@ -310,8 +321,6 @@ class GraspSelector(LeafSystem):
             # X_WG = X_WF @ RigidTransform(RotationMatrix.MakeZRotation(random_z_rot), np.array([random_x, 0, 0]))
 
             new_X_WG = X_WF @ RigidTransform(np.array([0, -0.05, 0]))  # Move gripper back by fixed amount
-
-            print(f"self.check_nonempty(obj_pc, new_X_WG): {self.check_nonempty(obj_pc, new_X_WG)}")
 
             # check_collision takes most of the runtime
             if (self.check_collision(obj_pc, new_X_WG) is not True) and self.check_nonempty(obj_pc, new_X_WG):  # no collision, and there is an object between fingers
@@ -347,6 +356,7 @@ class GraspSelector(LeafSystem):
         print("SelectGrasp")
 
         self.obj_pc = self.get_input_port(0).Eval(context).VoxelizedDownSample(voxel_size=0.0075)
+        self.obj_pc.EstimateNormals(0.05, 30)  # allows us to use obj_pc.normals() function later
         self.obj_traj = self.get_input_port(1).Eval(context)
 
         if (self.obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
@@ -385,10 +395,9 @@ class GraspSelector(LeafSystem):
 
         start = time.time()
         grasp_candidates = self.compute_candidate_grasps(
-            self.obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=10, random_seed=10
+            self.obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=25, random_seed=10
         )
-        print(time.time() - start)
-        print(f"grasp_candidates: {grasp_candidates}")
+        print(f"grasp sampling time: {time.time() - start}")
 
         # self.meshcat.Delete()
         self.meshcat.SetObject("cloud", self.obj_pc)
@@ -412,4 +421,4 @@ class GraspSelector(LeafSystem):
 
         self.draw_grasp_candidate(min_cost_grasp, prefix="gripper_best")
 
-        output.set_value({min_cost_grasp, obj_catch_t})
+        output.set_value({min_cost_grasp: obj_catch_t})
