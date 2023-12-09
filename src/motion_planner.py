@@ -333,7 +333,7 @@ class MotionPlanner(LeafSystem):
         X_WLink7 = plant.CalcRelativeTransform(plant_context, world_frame, gripper_frame)
         # offset by 0.1 in z-direction to account for gripper extending beyond link 7
         X_WStart = RigidTransform(X_WLink7.rotation(), X_WLink7.translation() + [0, 0, 0.1])
-        X_WGoal = obj_traj.value(obj_catch_t)
+        X_WGoal = X_WG
 
         # print(f"X_WStart: {X_WStart}")
         # print(f"X_WGoal: {X_WGoal}")

@@ -54,9 +54,11 @@ class GraspSelector(LeafSystem):
         self.plant = plant
         self.scene_graph = scene_graph
         self.meshcat = meshcat
+        self.random_transform = RigidTransform([-1, -1, 1])  # used for visualizing grasp candidates off to the side
+        self.visualize = True
 
 
-    def draw_grasp_candidate(self, X_G, prefix="gripper"):
+    def draw_grasp_candidate(self, X_G, prefix="gripper", random_transform=True):
         """
         Helper function to visualize grasp.
         """
@@ -67,6 +69,10 @@ class GraspSelector(LeafSystem):
         gripper = parser.AddModelsFromUrl(
             "package://manipulation/schunk_wsg_50_welded_fingers.sdf"
         )
+
+        if random_transform:
+            X_G = self.random_transform @ X_G
+
         plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("body"), X_G)
         AddMultibodyTriad(plant.GetFrameByName("body"), scene_graph)
         plant.Finalize()
@@ -399,8 +405,11 @@ class GraspSelector(LeafSystem):
         )
         print(f"grasp sampling time: {time.time() - start}")
 
-        # self.meshcat.Delete()
-        self.meshcat.SetObject("cloud", self.obj_pc)
+        # Visualize point cloud
+        obj_pc_for_visualization = PointCloud(self.obj_pc)
+        if (self.visualize):
+            obj_pc_for_visualization.mutable_xyzs()[:] = self.random_transform @ obj_pc_for_visualization.xyzs()
+            self.meshcat.SetObject("cloud", obj_pc_for_visualization)
 
         """
         Iterate through all grasps and select the best based on the following heuristic:
@@ -409,7 +418,7 @@ class GraspSelector(LeafSystem):
         This ensures the gripper doesn't try to grab an edge of the object.
         """
         min_cost = float('inf')
-        min_cost_grasp = None  # RigidTransform
+        min_cost_grasp = None  # RigidTransform, in object frame
         for grasp, grasp_cost in grasp_candidates.items():
 
             if grasp_cost < min_cost:
@@ -417,8 +426,14 @@ class GraspSelector(LeafSystem):
                 min_cost_grasp = grasp
 
             # draw all grasp candidates
-            self.draw_grasp_candidate(grasp, prefix="gripper " + str(time.time()))
+            if (self.visualize):
+                self.draw_grasp_candidate(grasp, prefix="gripper " + str(time.time()))
 
-        self.draw_grasp_candidate(min_cost_grasp, prefix="gripper_best")
+        # Convert min_cost_grasp to world frame
+        min_cost_grasp_W = self.obj_traj.value(obj_catch_t) @ min_cost_grasp
 
-        output.set_value({min_cost_grasp: obj_catch_t})
+        # draw best grasp gripper position in world
+        if (self.visualize):
+            self.draw_grasp_candidate(min_cost_grasp_W, prefix="gripper_best", random_transform=False)
+
+        output.set_value({min_cost_grasp_W: obj_catch_t})
