@@ -271,10 +271,16 @@ class GraspSelector(LeafSystem):
         # TODO: VALIDATE THIS MATH
         obj_vel_at_catch = self.obj_traj.EvalDerivative(t)[:3]  # (3,) np array
         obj_direction_at_catch = obj_vel_at_catch / np.linalg.norm(obj_vel_at_catch)  # normalize
-        X_OG_z_axis_vector = X_OG.rotation().matrix()[:, 1]
+        X_OG_z_axis_vector = (X_OG.rotation().matrix() @ np.array([[0],[0],[1]])).reshape((3,))
         X_WG_z_axis_vector = X_WO @ X_OG_z_axis_vector
+        X_WG_z_axis_vector_normalized = X_WG_z_axis_vector / np.linalg.norm(X_WG_z_axis_vector)
         # on the order of 0 - 1
-        alignment = 1 - np.dot(obj_direction_at_catch, X_WG_z_axis_vector)
+        alignment = 1 - np.dot(obj_direction_at_catch, X_WG_z_axis_vector_normalized)
+
+        # print(f"obj_direction_at_catch: {obj_direction_at_catch}")
+        # print(f"X_OG_z_axis_vector: {X_OG_z_axis_vector}")
+        # print(f"X_WG_z_axis_vector: {X_WG_z_axis_vector_normalized}")
+        # print(f"alignment: {alignment}")
 
 
         # Use IK to find joint positions for the given grasp pose
@@ -291,12 +297,13 @@ class GraspSelector(LeafSystem):
         # q = result.GetSolution(q)
 
         # Weight the different parts of the cost function
-        final_cost = 100*distance_obj_pc_centroid_to_X_OG_y_axis + angle + 5*alignment
+        # final_cost = 100*distance_obj_pc_centroid_to_X_OG_y_axis + angle + 5*alignment
+        final_cost = alignment
 
         return final_cost
 
 
-    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=10, random_seed=5):
+    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=12, random_seed=5):
         """
         Args:
             - obj_pc (PointCloud object): pointcloud of the object.
