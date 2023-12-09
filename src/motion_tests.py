@@ -81,7 +81,7 @@ def build_post_catch_trajectory(plant, plant_context, plant_autodiff, world_fram
         catch_vel,  # upper limit
         catch_vel,  # lower limit
         plant_autodiff.GetFrameByName("iiwa_link_7"),
-        np.array([0, 0, 0]).reshape(-1,1),
+        np.array([0, 0, 0.1]).reshape(-1,1),
         plant_autodiff.CreateDefaultContext(),
     )
     trajopt.AddPathPositionConstraint(start_constraint, 0)
@@ -185,7 +185,7 @@ def add_constraints(plant,
         X_WStart.translation(),  # upper limit
         X_WStart.translation(),  # lower limit
         gripper_frame,
-        [0, 0.1, 0],
+        [0, 0, 0.1],
         plant_context,
     )
     trajopt.AddPathPositionConstraint(start_constraint, 0)
@@ -230,7 +230,7 @@ def add_constraints(plant,
         obj_vel_at_catch - acceptable_vel_err,  # upper limit
         obj_vel_at_catch + acceptable_vel_err,  # lower limit
         plant_autodiff.GetFrameByName("iiwa_link_7"),
-        np.array([0, 0, 0]).reshape(-1,1),
+        np.array([0, 0, 0.1]).reshape(-1,1),
         plant_autodiff.CreateDefaultContext(),
     )
 

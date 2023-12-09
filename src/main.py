@@ -128,25 +128,19 @@ motion_planner = builder.AddSystem(MotionPlanner(plant, meshcat))
 builder.Connect(grasp_selector.GetOutputPort("grasp_selection"), motion_planner.GetInputPort("grasp_selection"))
 builder.Connect(station.GetOutputPort("body_poses"), motion_planner.GetInputPort("current_gripper_pose"))
 builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), motion_planner.GetInputPort("object_trajectory"))
+builder.Connect(motion_planner.GetOutputPort("iiwa_position_command"), station.GetInputPort("iiwa.position"))
 
-# Motion Testing
+# # Motion Testing
 # t = 0
 # test_obj_traj = PiecewisePolynomial.FirstOrderHold(
 #             [t, t + 1],  # Time knots
-#             np.array([[-1, 0.55], [-1, 0], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
+#             np.array([[0, 0.55], [1, 0], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
 #             )
 
 # start = time.time()
 # q_traj = motion_test(plant, meshcat, test_obj_traj, 1)
 # print(f"Time to perform traj opt: {time.time() - start}")
 
-
-### Calculate trajectory
-q_traj = motion_planner.GetOutputPort("trajectory").Eval(motion_planner.GetMyMutableContextFromRoot(context))
-
-# Connect output of motion system to input of iiwa's controller
-q_traj_system = builder.AddSystem(TrajectorySource(q_traj))
-builder.Connect(q_traj_system.get_output_port(), station.GetInputPort("iiwa.position"))
 
 # # Port Switch to switch from stationary trajectory to catching trajectory
 # switch = builder.AddSystem(PortSwitch(7))
@@ -169,9 +163,6 @@ diagram = builder.Build()
 context = diagram.CreateDefaultContext()
 diagram.set_name("object_catching_system")
 diagram_visualize_connections(diagram, "diagram.svg")
-
-q_traj = motion_planner.GetOutputPort("trajectory").Eval(motion_planner.GetMyMutableContextFromRoot(context))
-print(q_traj)
 
 
 ########################

@@ -344,19 +344,20 @@ class GraspSelector(LeafSystem):
     
 
     def SelectGrasp(self, context, output):
+        print("SelectGrasp")
 
-        obj_pc = self.get_input_port(0).Eval(context).VoxelizedDownSample(voxel_size=0.0075)
-        obj_traj = self.get_input_port(1).Eval(context)
+        self.obj_pc = self.get_input_port(0).Eval(context).VoxelizedDownSample(voxel_size=0.0075)
+        self.obj_traj = self.get_input_port(1).Eval(context)
 
-        if (obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
-            print("received default traj")
+        if (self.obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
+            print("received default traj (in SelectGrasp)")
             return
 
-        print(obj_traj)
+        print(self.obj_traj)
 
-        self.meshcat.SetObject("cloud", obj_pc)
+        self.meshcat.SetObject("cloud", self.obj_pc)
 
-        obj_pc_centroid = np.mean(obj_pc.xyzs(), axis=1)  # column-wise mean of 3xN np array of points
+        obj_pc_centroid = np.mean(self.obj_pc.xyzs(), axis=1)  # column-wise mean of 3xN np array of points
 
         # Find range of time where object is likely within iiwa's work evelope
         self.obj_reachable_start_t = 0.5  # random guess
@@ -364,7 +365,7 @@ class GraspSelector(LeafSystem):
         search_times = np.linspace(0.5, 1, 20)  # assuming first half of trajectory is definitely outside of iiwa's work envelope
         # Forward search to find the first time that the object is in iiwa's work envelope
         for t in search_times:
-            obj_pose = obj_traj.value(t)
+            obj_pose = self.obj_traj.value(t)
             obj_pos = obj_pose.translation()  # (3,) np array containing x,y,z
             obj_dist_from_iiwa_squared = obj_pos[0]**2 + obj_pos[1]**2
             # Object is between 420-750mm from iiwa's center in XY plane
@@ -372,7 +373,7 @@ class GraspSelector(LeafSystem):
                 self.obj_reachable_start_t = t
         # Backward search to find last time
         for t in search_times[::-1]:
-            obj_pose = obj_traj.value(t)
+            obj_pose = self.obj_traj.value(t)
             obj_pos = obj_pose.translation()  # (3,) np array containing x,y,z
             obj_dist_from_iiwa_squared = obj_pos[0]**2 + obj_pos[1]**2
             # Object is between 420-750mm from iiwa's center in XY plane
@@ -384,13 +385,13 @@ class GraspSelector(LeafSystem):
 
         start = time.time()
         grasp_candidates = self.compute_candidate_grasps(
-            obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=10, random_seed=10
+            self.obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=10, random_seed=10
         )
         print(time.time() - start)
         print(f"grasp_candidates: {grasp_candidates}")
 
         # self.meshcat.Delete()
-        self.meshcat.SetObject("cloud", obj_pc)
+        self.meshcat.SetObject("cloud", self.obj_pc)
 
         """
         Iterate through all grasps and select the best based on the following heuristic:
@@ -410,5 +411,5 @@ class GraspSelector(LeafSystem):
             self.draw_grasp_candidate(grasp, prefix="gripper " + str(time.time()))
 
         self.draw_grasp_candidate(min_cost_grasp, prefix="gripper_best")
-        
+
         output.set_value({min_cost_grasp, obj_catch_t})

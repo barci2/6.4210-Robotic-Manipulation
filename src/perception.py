@@ -291,9 +291,10 @@ class TrajectoryPredictor(CameraBackedSystem):
         # global pred_traj_calls
         # pred_traj_calls += 1
 
+        # Visualize spheres for the data points that are used for prediction
         # self._meshcat.SetTransform("obj_transform", X)
-        # self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.005), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
-        # self._meshcat.SetTransform(f"PredTrajSpheres/{pred_traj_calls}", X)
+        self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.005), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
+        self._meshcat.SetTransform(f"PredTrajSpheres/{pred_traj_calls}", X)
 
 
     def _calculate_icp(self, context: Context, p_s: npt.NDArray[np.float32]) -> RigidTransform:
@@ -360,12 +361,14 @@ class TrajectoryPredictor(CameraBackedSystem):
                 best_match_count = match_count
                 best_match_cost = match_cost
 
-        # for t in np.linspace(0, 2, 400):
-        #     self._meshcat.SetObject(f"RansacSpheres/{t}", Sphere(0.01), Rgba(0.2, 0.2, 1, 1))
-        #     self._meshcat.SetTransform(f"RansacSpheres/{t}", RigidTransform(best_traj.value(t)))
+        # Plot spheres along predicted trajectory
+        for t in np.linspace(0, 2, 400):
+            self._meshcat.SetObject(f"RansacSpheres/{t}", Sphere(0.01), Rgba(0.2, 0.2, 1, 1))
+            self._meshcat.SetTransform(f"RansacSpheres/{t}", RigidTransform(best_traj.value(t)))
 
         # print(f"best_match_count {best_match_count}")
         context.SetAbstractState(self._traj_state, best_traj)
 
     def OutputTrajectory(self, context, output):
+        print("OutputTrajectory (from perception.py)")
         output.set_value(context.get_abstract_state(self._traj_state).get_value())

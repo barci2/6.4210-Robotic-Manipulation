@@ -47,20 +47,21 @@ class MotionPlanner(LeafSystem):
         obj_traj = AbstractValue.Make(ObjectTrajectory())
         self.DeclareAbstractInputPort("object_trajectory", obj_traj)
 
-        port = self.DeclareAbstractOutputPort(
-            "trajectory",
-            lambda: AbstractValue.Make(BsplineTrajectory()),
-            self.compute_traj,
+        self._traj_index = self.DeclareAbstractState(
+            AbstractValue.Make(BsplineTrajectory())
         )
-        port.disable_caching_by_default()
-        self.DeclareVectorOutputPort("wsg_position", 1, self.compute_wsg_pos)
-
+        self.DeclareVectorOutputPort(
+            "iiwa_position_command", 7, self.output_traj
+        )
         # self._traj_wsg_index = self.DeclareAbstractState(
         #     AbstractValue.Make(PiecewisePolynomial())
         # )
 
         self.original_plant = original_plant
         self.meshcat = meshcat
+
+        # self.DeclarePeriodicUnrestrictedUpdateEvent(2.0, 0.0, self.compute_traj)
+        self.DeclareInitializationDiscreteUpdateEvent(self.compute_traj)
 
 
     def build_post_catch_trajectory(self, plant, plant_context, plant_autodiff, world_frame, gripper_frame, X_WCatch, catch_vel, catch_time, traj_duration = 0.25):
@@ -111,7 +112,7 @@ class MotionPlanner(LeafSystem):
             catch_vel,  # upper limit
             catch_vel,  # lower limit
             plant_autodiff.GetFrameByName("iiwa_link_7"),
-            np.array([0, 0, 0]).reshape(-1,1),
+            np.array([0, 0, 0.1]).reshape(-1,1),
             plant_autodiff.CreateDefaultContext(),
         )
         trajopt.AddPathPositionConstraint(start_constraint, 0)
@@ -213,7 +214,7 @@ class MotionPlanner(LeafSystem):
             X_WStart.translation(),  # upper limit
             X_WStart.translation(),  # lower limit
             gripper_frame,
-            [0, 0.1, 0],
+            [0, 0, 0.1],
             plant_context,
         )
         trajopt.AddPathPositionConstraint(start_constraint, 0)
@@ -258,7 +259,7 @@ class MotionPlanner(LeafSystem):
             obj_vel_at_catch - acceptable_vel_err,  # upper limit
             obj_vel_at_catch + acceptable_vel_err,  # lower limit
             plant_autodiff.GetFrameByName("iiwa_link_7"),
-            np.array([0, 0, 0]).reshape(-1,1),
+            np.array([0, 0, 0.1]).reshape(-1,1),
             plant_autodiff.CreateDefaultContext(),
         )
 
@@ -273,20 +274,22 @@ class MotionPlanner(LeafSystem):
         return final_vel_constraint
     
 
-    def compute_traj(self, context, output):
-        grasp = self.get_input_port(0).Eval(context)
-        X_WG = list(grasp.keys())[0]
-        obj_catch_t = list(grasp.values())[0]
-        if (X_WG == RigidTransform()):
-            print("received default catch pose")
-            return
-
+    def compute_traj(self, context, state):
+        print("motion_planner update event")
+        
         # TEMPORARY
         # obj_traj = ObjectTrajectory((0,-3,5), (0,-3,5), (-9.81/2,4,0.75))
 
         obj_traj = self.get_input_port(2).Eval(context)
         if (obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
-            print("received default traj")
+            print("received default obj traj (in compute_traj). returning from compute_traj.")
+            return
+
+        grasp = self.get_input_port(0).Eval(context)
+        X_WG = list(grasp.keys())[0]
+        obj_catch_t = list(grasp.values())[0]
+        if (X_WG.IsExactlyEqualTo(RigidTransform())):
+            print("received default catch pose. returning from compute_traj.")
             return
 
         self.original_plant_positions = self.original_plant.GetPositions(self.original_plant.CreateDefaultContext(), self.original_plant.GetModelInstanceByName("iiwa"))
@@ -396,7 +399,7 @@ class MotionPlanner(LeafSystem):
                                             q0, 
                                             obj_traj, 
                                             obj_catch_t,
-                                            duration_constraint=obj_catch_t)
+                                            duration_constraint=obj_catch_t-self.original_plant.get_time())
         # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
         trajopt_refined.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
@@ -415,10 +418,26 @@ class MotionPlanner(LeafSystem):
 
         complete_traj = CompositeTrajectory([final_traj, post_catch_traj])
 
-        output.set_value(complete_traj)
+        state.get_mutable_abstract_state(int(self._traj_X_G_index)).set_value(complete_traj)
 
 
-    def compute_wsg_pos(self, context, output):
+    def output_traj(self, context, output):
+        print("output_traj")
+        # Just set value at output port according to context time and trajectory state variable
+        traj_q = context.get_mutable_abstract_state(int(self._traj_index)).get_value()
+
+        # either object trajectory hasn't finished predicting yet, or grasp hasn't been selected yet,
+        # so traj_q is empty
+        if (traj_q.num_control_points() == 0):
+            print("planner outputting default iiwa position")
+            output.SetFromVector(self.original_plant.GetPositions(self.original_plant.CreateDefaultContext(), self.original_plant.GetModelInstanceByName("iiwa")))
+
+        else:
+            print("planner outputting iiwa position: " + str(traj_q.value(context.get_time())))
+            output.SetFromVector(traj_q.value(context.get_time()))
+
+
+    def output_wsg_traj(self, context, output):
         grasp = self.get_input_port(0).Eval(context)
         X_WG_Grasp = grasp.keys()[0]
         obj_catch_t = grasp.values()[0]
