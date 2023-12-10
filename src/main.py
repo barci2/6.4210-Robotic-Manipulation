@@ -79,7 +79,7 @@ icp_cameras, icp_camera_transforms = add_cameras(
     camera_height=600,
     horizontal_num=8,
     vertical_num=5,
-    camera_distance=3,
+    camera_distance=5,
     cameras_center=[0, 0, 0]
 )
 
