@@ -105,8 +105,6 @@ class GraspSelector(LeafSystem):
         AddMultibodyTriad(plant.GetFrameByName("body"), scene_graph)
         plant.Finalize()
 
-        # meshcat_vis = MeshcatVisualizer.AddToBuilder(builder, scene_graph, self.meshcat)
-
         diagram = builder.Build()
         context = diagram.CreateDefaultContext()
 

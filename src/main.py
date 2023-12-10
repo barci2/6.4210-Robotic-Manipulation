@@ -130,8 +130,9 @@ builder.Connect(obj_point_cloud_system.GetOutputPort("point_cloud"), grasp_selec
 ### Motion Planner
 motion_planner = builder.AddSystem(MotionPlanner(plant, meshcat))
 builder.Connect(grasp_selector.GetOutputPort("grasp_selection"), motion_planner.GetInputPort("grasp_selection"))
-builder.Connect(station.GetOutputPort("body_poses"), motion_planner.GetInputPort("current_gripper_pose"))
-builder.Connect(station.GetOutputPort("iiwa.velocity_estimated"), motion_planner.GetInputPort("current_gripper_spatial_vel"))
+builder.Connect(station.GetOutputPort("body_poses"), motion_planner.GetInputPort("iiwa_current_pose"))
+builder.Connect(station.GetOutputPort("iiwa.velocity_estimated"), motion_planner.GetInputPort("iiwa_current_vel"))
+builder.Connect(station.GetOutputPort("iiwa.position_measured"), motion_planner.GetInputPort("iiwa_current_pos"))
 builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), motion_planner.GetInputPort("object_trajectory"))
 builder.Connect(motion_planner.GetOutputPort("iiwa_position_command"), station.GetInputPort("iiwa.position"))
 
