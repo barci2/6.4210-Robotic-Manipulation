@@ -77,7 +77,7 @@ class MotionPlanner(LeafSystem):
         self.meshcat = meshcat
         self.previous_compute_result = None  # BpslineTrajectory object
 
-        self.DeclarePeriodicUnrestrictedUpdateEvent(0.1, 0.0, self.compute_traj)
+        self.DeclarePeriodicUnrestrictedUpdateEvent(0.025, 0.0, self.compute_traj)
 
 
     def setSolverSettings(self, prog):
@@ -266,7 +266,7 @@ class MotionPlanner(LeafSystem):
             plant.GetVelocityLowerLimits(), plant.GetVelocityUpperLimits()
         )
 
-        trajopt.AddDurationConstraint(obj_catch_t-acceptable_dur_err, obj_catch_t+acceptable_dur_err)
+        trajopt.AddDurationConstraint(duration_target-acceptable_dur_err, duration_target+acceptable_dur_err)
 
         link_7_to_gripper_transform = RotationMatrix.MakeZRotation(np.pi / 2) @ RotationMatrix.MakeXRotation(np.pi / 2)
 
@@ -352,8 +352,8 @@ class MotionPlanner(LeafSystem):
     def compute_traj(self, context, state):
         print("motion_planner update event")
 
-        if self.previous_compute_result != None:
-            return
+        # if self.previous_compute_result != None:
+        #     return
 
         obj_traj = self.get_input_port(2).Eval(context)
         if (obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
@@ -398,6 +398,10 @@ class MotionPlanner(LeafSystem):
             return
         print(f"obj_catch_t: {obj_catch_t}")
 
+        # If it's getting close to catch time, stop updating trajectory
+        if obj_catch_t - context.get_time() < 0.3:
+            return
+
         # Setup a new MBP with just the iiwa which the KinematicTrajectoryOptimization will use
         builder = DiagramBuilder()
         plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
@@ -426,10 +430,10 @@ class MotionPlanner(LeafSystem):
 
         MAX_ITERATIONS = 4
         num_iter = 0
-        cur_acceptable_duration_err=0.5
+        cur_acceptable_duration_err=0.25
         cur_acceptable_pos_err=0.1
-        cur_theta_bound=0.5
-        cur_acceptable_vel_err=1.0
+        cur_theta_bound=0.8
+        cur_acceptable_vel_err=1.5
         while(num_iter < MAX_ITERATIONS):
             trajopt = KinematicTrajectoryOptimization(num_q, 8)  # 8 control points in Bspline
             prog = trajopt.get_mutable_prog()
@@ -465,6 +469,7 @@ class MotionPlanner(LeafSystem):
                 path_guess = BsplineTrajectory(trajopt.basis(), q_guess)
                 trajopt.SetInitialGuess(path_guess)
             elif self.previous_compute_result is not None and num_iter == 0:
+                print("using previous executed traj as initial guess")
                 trajopt.SetInitialGuess(self.previous_compute_result)
             else:
                 print("using previous iter as initial guess")
@@ -586,8 +591,6 @@ class MotionPlanner(LeafSystem):
         # self.VisualizePath(complete_traj, "complete traj")
 
         # state.get_mutable_abstract_state(int(self._traj_index)).set_value(complete_traj)
-
-        # self.previous_compute_result = complete_traj
 
 
     def output_traj(self, context, output):
