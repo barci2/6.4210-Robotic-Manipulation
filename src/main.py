@@ -134,6 +134,7 @@ builder.Connect(station.GetOutputPort("body_poses"), motion_planner.GetInputPort
 builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), motion_planner.GetInputPort("object_trajectory"))
 builder.Connect(station.GetOutputPort("iiwa.state_estimated"), motion_planner.GetInputPort("iiwa_state"))
 builder.Connect(motion_planner.GetOutputPort("iiwa_command"), station.GetInputPort("iiwa.desired_state"))
+builder.Connect(motion_planner.GetOutputPort("wsg_command"), station.GetInputPort("wsg.position"))
 # print(station.GetInputPort("iiwa.desired_acceleration"))
 
 
@@ -157,7 +158,7 @@ plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
 
 ### Opening the gripper
 # station.GetInputPort("iiwa.position").FixValue(station_context, np.zeros(7)) # TESTING
-station.GetInputPort("wsg.position").FixValue(station_context, [1]) # TESTING
+# station.GetInputPort("wsg.position").FixValue(station_context, [1]) # TESTING
 
 
 ### Capturing the point cloud for the robot

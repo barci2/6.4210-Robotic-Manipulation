@@ -63,12 +63,21 @@ class MotionPlanner(LeafSystem):
                                                         np.array([[0, 0]])
                                                     )]))
         )
+
+        self._traj_wsg_index = self.DeclareAbstractState(
+            AbstractValue.Make(CompositeTrajectory([PiecewisePolynomial.FirstOrderHold(
+                                                        [0, 1],
+                                                        np.array([[0, 0]])
+                                                    )]))
+        )
+
         self.DeclareVectorOutputPort(
             "iiwa_command", 14, self.output_traj  # 7 pos, 7 vel
         )
-        # self._traj_wsg_index = self.DeclareAbstractState(
-        #     AbstractValue.Make(PiecewisePolynomial())
-        # )
+
+        self.DeclareVectorOutputPort(
+            "wsg_command", 1, self.output_wsg_traj  # 7 pos, 7 vel
+        )
 
         self.original_plant = original_plant
         self.meshcat = meshcat
@@ -225,12 +234,12 @@ class MotionPlanner(LeafSystem):
 
         # Time shift the trajectory
         time_shift = catch_time  # Time shift value in seconds
-        time_scaling_trajectory = PiecewisePolynomial.FirstOrderHold(
+        time_scaling_traj = PiecewisePolynomial.FirstOrderHold(
             [time_shift, time_shift+traj_duration],  # Assuming two segments: initial and final times
             np.array([[0, traj_duration]])  # Shifts start and end times by time_shift
         )
         time_shifted_traj = PathParameterizedTrajectory(
-            traj, time_scaling_trajectory
+            traj, time_scaling_traj
         )
 
         return time_shifted_traj
@@ -250,9 +259,9 @@ class MotionPlanner(LeafSystem):
                         current_gripper_vel,
                         duration_target,
                         acceptable_dur_err=0.01,
-                        acceptable_pos_err=0.01,
-                        theta_bound = 0.3,
-                        acceptable_vel_err=2.0):
+                        acceptable_pos_err=0.025,
+                        theta_bound = 0.4,
+                        acceptable_vel_err=1.0):
         
         trajopt.AddPathLengthCost(1.0)
 
@@ -326,7 +335,7 @@ class MotionPlanner(LeafSystem):
 
         # end with velocity equal to object's velocity at that moment
         # DIVISION BY 3 IS TEMPORARY; HAVING SUCH HIGH ENDING VELOCITY MAKES IT VERY HARD FOR SNOPT TO SOLVE
-        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]/3  # (3,1) np array
+        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]/2  # (3,1) np array
         final_vel_constraint = SpatialVelocityConstraint(
             plant_autodiff,
             plant_autodiff.world_frame(),
@@ -351,8 +360,8 @@ class MotionPlanner(LeafSystem):
     def compute_traj(self, context, state):
         print("motion_planner update event")
 
-        if self.previous_compute_result != None:
-            return
+        # if self.previous_compute_result != None:
+        #     return
 
         obj_traj = self.get_input_port(2).Eval(context)
         if (obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
@@ -522,6 +531,21 @@ class MotionPlanner(LeafSystem):
                 cur_acceptable_vel_err *= 0.85
 
                 num_iter += 1
+
+                # Also set the WSG trajectory once (this doesn't need to be updated in future cycles)
+                close_time = 0.1
+                wsg_open_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
+                    [0, obj_catch_t],
+                    np.array([[1, 1]])
+                )
+                wsg_close_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
+                    [obj_catch_t, obj_catch_t+close_time],
+                    np.array([[1, 0]]) 
+                )
+
+                wsg_complete_traj = CompositeTrajectory([wsg_open_traj, wsg_close_traj])
+
+                state.get_mutable_abstract_state(int(self._traj_wsg_index)).set_value(wsg_complete_traj)
         
         # If this is not the first cycle (so we have a good initial guess already), then just go straight to an optimization w/strict constraints
         else:
@@ -551,8 +575,8 @@ class MotionPlanner(LeafSystem):
                                                                               )
             
             # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
-            # trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
-            # trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
+            trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
+            trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
             trajopt.SetInitialGuess(self.previous_compute_result)
 
@@ -571,12 +595,12 @@ class MotionPlanner(LeafSystem):
 
         # Shift trajectory in time so that it starts at the current time
         time_shift = context.get_time()  # Time shift value in seconds
-        time_scaling_trajectory = PiecewisePolynomial.FirstOrderHold(
+        time_scaling_traj = PiecewisePolynomial.FirstOrderHold(
             [time_shift, time_shift+final_traj.end_time()],  # Assuming two segments: initial and final times
             np.array([[0, final_traj.end_time()-final_traj.start_time()]])  # Shifts start and end times by time_shift
         )
         time_shifted_final_traj = PathParameterizedTrajectory(
-            final_traj, time_scaling_trajectory
+            final_traj, time_scaling_traj
         )
         print(f"time_shifted_final_traj.start_time(): {time_shifted_final_traj.start_time()}")
         print(f"time_shifted_final_traj.end_time(): {time_shifted_final_traj.end_time()}")
@@ -623,7 +647,6 @@ class MotionPlanner(LeafSystem):
 
         else:
             # print("planner outputting iiwa position: " + str(traj_q.value(context.get_time())))
-            print(f"command: {traj_q.value(context.get_time())}")
             output.SetFromVector(np.append(
                 traj_q.value(context.get_time()),
                 traj_q.EvalDerivative(context.get_time())
@@ -631,7 +654,9 @@ class MotionPlanner(LeafSystem):
 
 
     def output_wsg_traj(self, context, output):
-        pass
+        traj_wsg = context.get_mutable_abstract_state(int(self._traj_wsg_index)).get_value()
+        # print(f"wsg output: {traj_wsg.value(context.get_time())}")
+        output.SetFromVector(traj_wsg.value(context.get_time()))
 
         # grasp = self.get_input_port(0).Eval(context)
         # X_WG_Grasp = grasp.keys()[0]

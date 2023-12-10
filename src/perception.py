@@ -294,7 +294,7 @@ class TrajectoryPredictor(CameraBackedSystem):
         # self._meshcat.SetTransform("obj_transform", X)
         global pred_traj_calls
         pred_traj_calls += 1
-        self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.02), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
+        self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.005), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
         self._meshcat.SetTransform(f"PredTrajSpheres/{pred_traj_calls}", X)
 
 
