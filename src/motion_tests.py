@@ -139,7 +139,7 @@ def build_post_catch_trajectory(plant, plant_context, plant_autodiff, world_fram
     time_shift = catch_time  # Time shift value in seconds
     time_scaling_trajectory = PiecewisePolynomial.FirstOrderHold(
         [time_shift, time_shift+traj_duration],  # Assuming two segments: initial and final times
-        np.array([[0, 0]])  # Shifts start and end times by time_shift
+        np.array([[0, traj_duration]])  # Shifts start and end times by time_shift
     )
     time_shifted_traj = PathParameterizedTrajectory(
         traj, time_scaling_trajectory

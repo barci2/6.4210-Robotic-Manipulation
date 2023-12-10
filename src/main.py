@@ -134,10 +134,7 @@ builder.Connect(station.GetOutputPort("body_poses"), motion_planner.GetInputPort
 builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), motion_planner.GetInputPort("object_trajectory"))
 builder.Connect(station.GetOutputPort("iiwa.state_estimated"), motion_planner.GetInputPort("iiwa_state"))
 builder.Connect(motion_planner.GetOutputPort("iiwa_command"), station.GetInputPort("iiwa.desired_state"))
-
-# builder.Connect(station.GetOutputPort("iiwa.velocity_estimated"), motion_planner.GetInputPort("iiwa_current_vel"))
-# builder.Connect(station.GetOutputPort("iiwa.position_measured"), motion_planner.GetInputPort("iiwa_current_pos"))
-# builder.Connect(motion_planner.GetOutputPort("iiwa_position_command"), station.GetInputPort("iiwa.position"))
+# print(station.GetInputPort("iiwa.desired_acceleration"))
 
 
 ### Finalizing diagram setup

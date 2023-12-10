@@ -54,11 +54,6 @@ class MotionPlanner(LeafSystem):
         obj_traj = AbstractValue.Make(ObjectTrajectory())
         self.DeclareAbstractInputPort("object_trajectory", obj_traj)
 
-        # used to figure out current gripper velocity
-        # iiwa_joint_vel = self.DeclareVectorInputPort(name="iiwa_current_vel", size=7)
-
-        # iiwa_joint_pos = self.DeclareVectorInputPort(name="iiwa_current_pos", size=7)
-
         iiwa_state = self.DeclareVectorInputPort(name="iiwa_state", size=14)  # 7 pos, 7 vel
         
 
@@ -232,7 +227,7 @@ class MotionPlanner(LeafSystem):
         time_shift = catch_time  # Time shift value in seconds
         time_scaling_trajectory = PiecewisePolynomial.FirstOrderHold(
             [time_shift, time_shift+traj_duration],  # Assuming two segments: initial and final times
-            np.array([[0, 0]])  # Shifts start and end times by time_shift
+            np.array([[0, traj_duration]])  # Shifts start and end times by time_shift
         )
         time_shifted_traj = PathParameterizedTrajectory(
             traj, time_scaling_trajectory
@@ -256,8 +251,8 @@ class MotionPlanner(LeafSystem):
                         duration_target,
                         acceptable_dur_err=0.01,
                         acceptable_pos_err=0.01,
-                        theta_bound = 0.4,
-                        acceptable_vel_err=1.0):
+                        theta_bound = 0.3,
+                        acceptable_vel_err=2.0):
         
         trajopt.AddPathLengthCost(1.0)
 
@@ -268,6 +263,7 @@ class MotionPlanner(LeafSystem):
             plant.GetVelocityLowerLimits(), plant.GetVelocityUpperLimits()
         )
 
+        print(f"duration_target: {duration_target}")
         trajopt.AddDurationConstraint(duration_target-acceptable_dur_err, duration_target+acceptable_dur_err)
 
         link_7_to_gripper_transform = RotationMatrix.MakeZRotation(np.pi / 2) @ RotationMatrix.MakeXRotation(np.pi / 2)
@@ -355,8 +351,8 @@ class MotionPlanner(LeafSystem):
     def compute_traj(self, context, state):
         print("motion_planner update event")
 
-        # if self.previous_compute_result != None:
-        #     return
+        if self.previous_compute_result != None:
+            return
 
         obj_traj = self.get_input_port(2).Eval(context)
         if (obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
@@ -372,12 +368,6 @@ class MotionPlanner(LeafSystem):
         iiwa_state = self.get_input_port(3).Eval(context)
         q_current = iiwa_state[:7]
         iiwa_vels = iiwa_state[7:]
-
-        # # Get current iiwa positions
-        # q_current = self.get_input_port(4).Eval(context)  # "iiwa_current_pose" input port
-
-        # # Get current iiwa joint velocities from input port
-        # iiwa_vels = self.get_input_port(3).Eval(context)  # "iiwa_current_vel" input port
 
         # Build a new plant to do calculate the velocity Jacobian
         builder = DiagramBuilder()
@@ -408,7 +398,7 @@ class MotionPlanner(LeafSystem):
         print(f"obj_catch_t: {obj_catch_t}")
 
         # If it's getting close to catch time, stop updating trajectory
-        if obj_catch_t - context.get_time() < 0.3:
+        if obj_catch_t - context.get_time() < 0.2:
             return
 
         # Setup a new MBP with just the iiwa which the KinematicTrajectoryOptimization will use
@@ -442,10 +432,10 @@ class MotionPlanner(LeafSystem):
         q_nominal = np.array([0.0, 0.6, 0.0, -1.75, 0.0, 1.0, 0.0])  # nominal joint for joint-centering
 
         # If this is the very first traj opt (so we don't yet have a very good initial guess), do an interative optimization
-        MAX_ITERATIONS = 8
+        MAX_ITERATIONS = 12
         if self.previous_compute_result is None:
             num_iter = 0
-            cur_acceptable_duration_err=0.25
+            cur_acceptable_duration_err=0.01
             cur_acceptable_pos_err=0.1
             cur_theta_bound=0.8
             cur_acceptable_vel_err=1.0
@@ -561,8 +551,8 @@ class MotionPlanner(LeafSystem):
                                                                               )
             
             # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
-            trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
-            trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
+            # trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
+            # trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
             trajopt.SetInitialGuess(self.previous_compute_result)
 
@@ -576,11 +566,14 @@ class MotionPlanner(LeafSystem):
 
             final_traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
 
+        print(f"final_traj.start_time(): {final_traj.start_time()}")
+        print(f"final_traj.end_time(): {final_traj.end_time()}")
+
         # Shift trajectory in time so that it starts at the current time
         time_shift = context.get_time()  # Time shift value in seconds
         time_scaling_trajectory = PiecewisePolynomial.FirstOrderHold(
             [time_shift, time_shift+final_traj.end_time()],  # Assuming two segments: initial and final times
-            np.array([[0, 1]])  # Shifts start and end times by time_shift
+            np.array([[0, final_traj.end_time()-final_traj.start_time()]])  # Shifts start and end times by time_shift
         )
         time_shifted_final_traj = PathParameterizedTrajectory(
             final_traj, time_scaling_trajectory
@@ -630,6 +623,7 @@ class MotionPlanner(LeafSystem):
 
         else:
             # print("planner outputting iiwa position: " + str(traj_q.value(context.get_time())))
+            print(f"command: {traj_q.value(context.get_time())}")
             output.SetFromVector(np.append(
                 traj_q.value(context.get_time()),
                 traj_q.EvalDerivative(context.get_time())
