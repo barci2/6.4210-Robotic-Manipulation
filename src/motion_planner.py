@@ -190,23 +190,23 @@ class MotionPlanner(LeafSystem):
         goal_pos_constraint = PositionConstraint(
             plant,
             world_frame,
-            X_WEnd.translation() - 0.1,  # upper limit
-            X_WEnd.translation() + 0.1,  # lower limit
+            X_WEnd.translation() - 0.25,  # upper limit
+            X_WEnd.translation() + 0.25,  # lower limit
             gripper_frame,
             [0, 0, 0.1],
             plant_context,
         )
-        goal_orientation_constraint = OrientationConstraint(
-            plant,
-            world_frame,
-            X_WEnd.rotation(),  # orientation of gripper in world frame ...
-            gripper_frame,
-            link_7_to_gripper_transform,  # ... must equal origin in gripper frame
-            0.5,  # theta bound
-            plant_context
-        )
+        # goal_orientation_constraint = OrientationConstraint(
+        #     plant,
+        #     world_frame,
+        #     X_WEnd.rotation(),  # orientation of gripper in world frame ...
+        #     gripper_frame,
+        #     link_7_to_gripper_transform,  # ... must equal origin in gripper frame
+        #     0.5,  # theta bound
+        #     plant_context
+        # )
         trajopt.AddPathPositionConstraint(goal_pos_constraint, 1)
-        trajopt.AddPathPositionConstraint(goal_orientation_constraint, 1)
+        # trajopt.AddPathPositionConstraint(goal_orientation_constraint, 1)
         prog.AddQuadraticErrorCost(
             np.eye(num_q), q0, trajopt.control_points()[:, -1]
         )
