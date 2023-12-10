@@ -71,6 +71,37 @@ class MotionPlanner(LeafSystem):
         # self.DeclareInitializationDiscreteUpdateEvent(self.compute_traj)
 
 
+    # Path Visualization
+    def VisualizePath(self, traj):
+        """
+        Helper function that takes in trajopt basis and control points of Bspline
+        and draws spline in meshcat.
+        """
+        # Build a new plant to do the forward kinematics to turn this Bspline into 3D coordinates
+        builder = DiagramBuilder()
+        vis_plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
+        viz_iiwa = Parser(vis_plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
+        vis_plant.WeldFrames(vis_plant.world_frame(), vis_plant.GetFrameByName("base"))
+        vis_plant.Finalize()
+        vis_plant_context = vis_plant.CreateDefaultContext()
+
+        # Build matrix of 3d positions by doing forward kinematics at time steps in the bspline
+        NUM_STEPS = 75
+        pos_3d_matrix = np.zeros((3,NUM_STEPS))
+        ctr = 0
+        for vis_t in np.linspace(0, 1, NUM_STEPS):
+            iiwa_pos = traj.value(vis_t)
+            vis_plant.SetPositions(vis_plant_context, viz_iiwa, iiwa_pos)
+            pos_3d = vis_plant.CalcRelativeTransform(vis_plant_context, vis_plant.world_frame(), vis_plant.GetFrameByName("iiwa_link_7")).translation()
+            pos_3d_matrix[:,ctr] = pos_3d
+            ctr += 1
+
+        print(f"pos_3d_matrix: {pos_3d_matrix}")
+
+        # Draw line
+        self.meshcat.SetLine("positions_path", pos_3d_matrix)
+
+
     def build_post_catch_trajectory(self, plant, plant_context, plant_autodiff, world_frame, gripper_frame, X_WCatch, catch_vel, iiwa_catch_pos, catch_time, traj_duration = 0.25):
         num_q = plant.num_positions()  # =7 (all of iiwa's joints)
         q0 = iiwa_catch_pos
@@ -314,8 +345,7 @@ class MotionPlanner(LeafSystem):
         # Setup a new MBP with just the iiwa which the KinematicTrajectoryOptimization will use
         builder = DiagramBuilder()
         plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
-        iiwa_file = "package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf"
-        iiwa = Parser(plant).AddModelsFromUrl(iiwa_file)[0]  # ModelInstance object
+        iiwa = Parser(plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
         # wsg_file = "package://drake/manipulation/models/wsg_50_description/sdf/schunk_wsg_50_with_tip.sdf"
         # wsg = Parser(plant).AddModelsFromUrl(wsg_file)[0]  # ModelInstance object
         world_frame = plant.world_frame()
@@ -428,36 +458,6 @@ class MotionPlanner(LeafSystem):
 
         trajopt_refined.SetInitialGuess(solved_traj)
 
-        # Path Visualization
-        def PlotPath(control_points):
-            traj = BsplineTrajectory(
-                trajopt_refined.basis(), control_points.reshape((7, -1))
-            )
-
-            # Build a new plant to do the forward kinematics to turn this Bspline into 3D coordinates
-            builder = DiagramBuilder()
-            vis_plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
-            viz_iiwa = Parser(vis_plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
-            vis_plant.WeldFrames(vis_plant.world_frame(), vis_plant.GetFrameByName("base"))
-            vis_plant.Finalize()
-            vis_plant_context = vis_plant.CreateDefaultContext()
-            pos_3d_matrix = np.zeros((3,50))
-            ctr = 0
-            for vis_t in np.linspace(0, 1, 50):
-                iiwa_pos = traj.value(vis_t)
-                vis_plant.SetPositions(vis_plant_context, viz_iiwa, iiwa_pos)
-                pos_3d = vis_plant.CalcRelativeTransform(vis_plant_context, vis_plant.world_frame(), vis_plant.GetFrameByName("iiwa_link_7")).translation()
-                pos_3d_matrix[:,ctr] = pos_3d
-                ctr += 1
-
-            print(f"pos_3d_matrix: {pos_3d_matrix}")
-
-            self.meshcat.SetLine("positions_path", pos_3d_matrix)
-
-        prog_refined.AddVisualizationCallback(
-            PlotPath, trajopt_refined.control_points().reshape((-1,))
-        )
-
         result = Solve(prog_refined)
         if not result.is_success():
             print("ERROR: Second Trajectory optimization failed: " + str(result.get_solver_id().name()))
@@ -468,9 +468,19 @@ class MotionPlanner(LeafSystem):
         final_traj_end_time = final_traj.end_time()
 
         obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,1) np array
-        post_catch_traj = self.build_post_catch_trajectory(plant, plant_context, plant_autodiff, world_frame, gripper_frame, X_WGoal, obj_vel_at_catch, final_traj.value(final_traj_end_time), final_traj_end_time)
+        post_catch_traj = self.build_post_catch_trajectory(plant, 
+                                                           plant_context, 
+                                                           plant_autodiff, 
+                                                           world_frame, 
+                                                           gripper_frame, 
+                                                           X_WGoal, 
+                                                           obj_vel_at_catch, 
+                                                           final_traj.value(final_traj_end_time), 
+                                                           final_traj_end_time)
 
         complete_traj = CompositeTrajectory([final_traj, post_catch_traj])
+
+        self.VisualizePath(complete_traj)
 
         state.get_mutable_abstract_state(int(self._traj_index)).set_value(complete_traj)
 
