@@ -69,9 +69,9 @@ def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str) -
     joint = plant.get_joint(joint_idx)  # Joint object
 
     # Generate random object pose
-    z = 0.75  # fixed z for now
-    x = np.random.uniform(3.5, 4) * np.random.choice([-1, 1])
-    y = np.random.uniform(3.5, 4) * np.random.choice([-1, 1])
+    z = 0.5  # fixed z for now
+    x = np.random.uniform(2.4, 2.5) * np.random.choice([-1, 1])
+    y = np.random.uniform(2.4, 2.5) * np.random.choice([-1, 1])
 
     # Set object pose
     body_idx = plant.GetBodyIndices(model_instance)[0]  # BodyIndex object
@@ -82,8 +82,8 @@ def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str) -
     # Unlock joint so object is subject to gravity
     joint.Unlock(plant_context)
 
-    v_magnitude = np.random.uniform(6.0, 6.5)
-    angle_perturb = np.random.uniform(0.07, 0.09) * np.random.choice(
+    v_magnitude = np.random.uniform(4.75, 5.0)
+    angle_perturb = np.random.uniform(0.09, 0.10) * np.random.choice(
         [-1, 1]
     )  # must perturb by at least 0.1 rad to avoid throwing directly at iiwa
     # ensure the perturbation is applied such that it directs the obj away from iiwa

@@ -111,7 +111,7 @@ traj_pred_system = builder.AddSystem(TrajectoryPredictor(
     cameras=icp_cameras,
     camera_transforms=icp_camera_transforms,
     pred_thresh=5,
-    pred_samples_thresh=4,
+    pred_samples_thresh=2,  # how many views of object are needed before outputting predicted traj
     thrown_model_name=obj_name,
     ransac_iters=20,
     ransac_thresh=0.01,
@@ -131,26 +131,13 @@ builder.Connect(obj_point_cloud_system.GetOutputPort("point_cloud"), grasp_selec
 motion_planner = builder.AddSystem(MotionPlanner(plant, meshcat))
 builder.Connect(grasp_selector.GetOutputPort("grasp_selection"), motion_planner.GetInputPort("grasp_selection"))
 builder.Connect(station.GetOutputPort("body_poses"), motion_planner.GetInputPort("iiwa_current_pose"))
-builder.Connect(station.GetOutputPort("iiwa.velocity_estimated"), motion_planner.GetInputPort("iiwa_current_vel"))
-builder.Connect(station.GetOutputPort("iiwa.position_measured"), motion_planner.GetInputPort("iiwa_current_pos"))
 builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), motion_planner.GetInputPort("object_trajectory"))
-builder.Connect(motion_planner.GetOutputPort("iiwa_position_command"), station.GetInputPort("iiwa.position"))
+builder.Connect(station.GetOutputPort("iiwa.state_estimated"), motion_planner.GetInputPort("iiwa_state"))
+builder.Connect(motion_planner.GetOutputPort("iiwa_command"), station.GetInputPort("iiwa.desired_state"))
 
-
-# # Port Switch to switch from stationary trajectory to catching trajectory
-# switch = builder.AddSystem(PortSwitch(7))
-# builder.Connect(
-#     diff_ik.get_output_port(), switch.DeclareInputPort("diff_ik")  # For normal use case
-# )
-# builder.Connect(
-#     planner.GetOutputPort("iiwa_position_command"),  # for Planner's GoHome state
-#     switch.DeclareInputPort("position"),
-# )
-# builder.Connect(switch.get_output_port(), station.GetInputPort("iiwa.position"))
-# builder.Connect(
-#     planner.GetOutputPort("control_mode"),
-#     switch.get_port_selector_input_port(),
-# )
+# builder.Connect(station.GetOutputPort("iiwa.velocity_estimated"), motion_planner.GetInputPort("iiwa_current_vel"))
+# builder.Connect(station.GetOutputPort("iiwa.position_measured"), motion_planner.GetInputPort("iiwa_current_pos"))
+# builder.Connect(motion_planner.GetOutputPort("iiwa_position_command"), station.GetInputPort("iiwa.position"))
 
 
 ### Finalizing diagram setup

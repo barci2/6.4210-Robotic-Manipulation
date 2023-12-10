@@ -7,9 +7,9 @@
 #  - Only `link` tags can be welded (?)
 
 model_drivers:
-    iiwa: !IiwaDriver
-        hand_model_name: wsg
-    # iiwa: !InverseDynamicsDriver {}
+    # iiwa: !IiwaDriver
+    #     hand_model_name: wsg
+    iiwa: !InverseDynamicsDriver {}
     wsg: !SchunkWsgDriver {}
 
 directives:
