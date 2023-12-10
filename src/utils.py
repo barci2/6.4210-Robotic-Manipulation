@@ -96,7 +96,7 @@ def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str) -
     z_perturb = np.random.uniform(-0.5, 0.5)
     v_x = -v_magnitude * cos_alpha
     v_y = -v_magnitude * sin_alpha
-    v_z = 4 + z_perturb
+    v_z = 3.8 + z_perturb
 
     # Define the spatial velocity
     spatial_velocity = SpatialVelocity(

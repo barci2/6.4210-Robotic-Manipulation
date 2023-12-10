@@ -401,7 +401,7 @@ class GraspSelector(LeafSystem):
 
             start = time.time()
             grasp_candidates = self.compute_candidate_grasps(self.obj_pc, obj_pc_centroid, obj_catch_t)
-            print(f"grasp sampling time: {time.time() - start}")
+            print(f"-----------grasp sampling runtime: {time.time() - start}")
 
             # Visualize point cloud
             obj_pc_for_visualization = PointCloud(self.obj_pc)
