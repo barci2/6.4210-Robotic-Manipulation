@@ -23,6 +23,8 @@ from pydrake.all import (
     Rgba,
     Quaternion,
     RotationMatrix,
+    SpatialVelocity,
+    JacobianWrtVariable
 )
 
 from manipulation.meshcat_utils import AddMeshcatTriad
@@ -49,6 +51,7 @@ class MotionPlanner(LeafSystem):
         obj_traj = AbstractValue.Make(ObjectTrajectory())
         self.DeclareAbstractInputPort("object_trajectory", obj_traj)
 
+        current_gripper_vel = self.DeclareVectorInputPort(name="current_gripper_spatial_vel", size=7)
         
 
         self._traj_index = self.DeclareAbstractState(
@@ -68,7 +71,6 @@ class MotionPlanner(LeafSystem):
         self.meshcat = meshcat
 
         self.DeclarePeriodicUnrestrictedUpdateEvent(0.1, 0.0, self.compute_traj)
-        # self.DeclareInitializationDiscreteUpdateEvent(self.compute_traj)
 
 
     # Path Visualization
@@ -95,8 +97,6 @@ class MotionPlanner(LeafSystem):
             pos_3d = vis_plant.CalcRelativeTransform(vis_plant_context, vis_plant.world_frame(), vis_plant.GetFrameByName("iiwa_link_7")).translation()
             pos_3d_matrix[:,ctr] = pos_3d
             ctr += 1
-
-        print(f"pos_3d_matrix: {pos_3d_matrix}")
 
         # Draw line
         self.meshcat.SetLine("positions_path", pos_3d_matrix)
@@ -231,6 +231,7 @@ class MotionPlanner(LeafSystem):
                         q0, 
                         obj_traj, 
                         obj_catch_t,
+                        current_gripper_vel,
                         duration_constraint=-1,
                         acceptable_pos_err=0.0,
                         theta_bound = 0.05,
@@ -285,17 +286,15 @@ class MotionPlanner(LeafSystem):
             np.eye(num_q), q0, trajopt.control_points()[:, -1]
         )
 
-        # start with velocity equal to iiwa's current velocity
-        current_iiwa_vel = plant.EvalBodySpatialVelocityInWorld(plant_context, plant.GetBodyByName("iiwa_link_7")).get_coeffs()[3:]
-        print(f"current_vel: {current_iiwa_vel}")
+        # Start with velocity equal to iiwa's current velocity
         # Current limitation: SpatialVelocityConstraint only takes into account translational velocity; not rotational
         start_vel_constraint = SpatialVelocityConstraint(
             plant_autodiff,
             plant_autodiff.world_frame(),
-            current_iiwa_vel,  # upper limit
-            current_iiwa_vel,  # lower limit
+            current_gripper_vel - acceptable_vel_err,  # upper limit
+            current_gripper_vel + acceptable_vel_err,  # lower limit
             plant_autodiff.GetFrameByName("iiwa_link_7"),
-            np.array([0, 0, 0]).reshape(-1,1),  # purposely don't add gripper offset here; we just want link7 to follow the current velocity of link7
+            np.array([0, 0, 0.1]).reshape(-1,1),
             plant_autodiff.CreateDefaultContext(),
         )
 
@@ -324,14 +323,36 @@ class MotionPlanner(LeafSystem):
 
     def compute_traj(self, context, state):
         print("motion_planner update event")
-        
-        # TEMPORARY
-        # obj_traj = ObjectTrajectory((0,-3,5), (0,-3,5), (-9.81/2,4,0.75))
 
         obj_traj = self.get_input_port(2).Eval(context)
         if (obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
             # print("received default obj traj (in compute_traj). returning from compute_traj.")
             return
+        
+        # Get current gripper pose from input port
+        body_poses = self.get_input_port(1).Eval(context)  # "current_gripper_pose" input port
+        gripper_body_idx = self.original_plant.GetBodyByName("body").index()  # BodyIndex object
+        current_gripper_pose = body_poses[gripper_body_idx]  # RigidTransform object
+        print(f"current_gripper_pose: {current_gripper_pose}")
+
+        # Get current iiwa joint velocities from input port
+        iiwa_vels = self.get_input_port(3).Eval(context)  # "current_gripper_spatial_vel" input port
+        print(f"iiwa_vels: {iiwa_vels}")
+
+        # Build a new plant to do calculate the velocity Jacobian
+        builder = DiagramBuilder()
+        j_plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
+        j_iiwa = Parser(j_plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
+        j_plant.WeldFrames(j_plant.world_frame(), j_plant.GetFrameByName("base"))
+        j_plant.Finalize()
+        j_plant_context = j_plant.CreateDefaultContext()
+
+        J = j_plant.CalcJacobianTranslationalVelocity(
+                    j_plant_context, JacobianWrtVariable.kQDot, 
+                    j_plant.GetFrameByName("iiwa_link_7"), [0, 0, 0.1], j_plant.world_frame(), j_plant.world_frame())
+        current_gripper_vel = np.dot(J, iiwa_vels)
+        print(f"current_gripper_vel: {current_gripper_vel}")
+
 
         grasp = self.get_input_port(0).Eval(context)
         X_WG = list(grasp.keys())[0]
@@ -340,25 +361,16 @@ class MotionPlanner(LeafSystem):
             print("received default catch pose. returning from compute_traj.")
             return
 
-        self.original_plant_positions = self.original_plant.GetPositions(self.original_plant.CreateDefaultContext(), self.original_plant.GetModelInstanceByName("iiwa"))
-
         # Setup a new MBP with just the iiwa which the KinematicTrajectoryOptimization will use
         builder = DiagramBuilder()
         plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
         iiwa = Parser(plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
-        # wsg_file = "package://drake/manipulation/models/wsg_50_description/sdf/schunk_wsg_50_with_tip.sdf"
-        # wsg = Parser(plant).AddModelsFromUrl(wsg_file)[0]  # ModelInstance object
         world_frame = plant.world_frame()
         base_frame = plant.GetFrameByName("base")
         gripper_frame = plant.GetFrameByName("iiwa_link_7")
-        # gripper_frame = plant.GetFrameByName("body")
         plant.WeldFrames(world_frame, base_frame)  # Weld iiwa to world
-        # plant.WeldFrames(l7_frame, gripper_frame)  # Weld wsg to iiwa
         plant.Finalize()
         plant_context = plant.CreateDefaultContext()
-
-        # Set positions of this new plant equal to the positions of the main plant
-        plant.SetPositions(plant_context, iiwa, self.original_plant_positions)
 
         # Create auto-differentiable version the plant in order to set velocity constraints
         plant_autodiff = plant.ToAutoDiffXd()
@@ -367,16 +379,13 @@ class MotionPlanner(LeafSystem):
         times = np.linspace(0, 1, 50)
         for t in times:
             obj_pose = obj_traj.value(t)
-            self.meshcat.SetObject(str(t), Sphere(0.005), Rgba(0.4, 1, 1, 1))
+            self.meshcat.SetObject(str(t), Sphere(0.001), Rgba(0.4, 1, 1, 1))
             self.meshcat.SetTransform(str(t), obj_pose)
 
-        # X_WStart is robot current pose
-        X_WLink7 = plant.CalcRelativeTransform(plant_context, world_frame, gripper_frame)
-        # offset by 0.1 in z-direction to account for gripper extending beyond link 7
-        X_WStart = RigidTransform(X_WLink7.rotation(), X_WLink7.translation() + [0, 0, 0.1])
+        X_WStart = current_gripper_pose
         X_WGoal = X_WG
 
-        # print(f"X_WStart: {X_WStart}")
+        print(f"X_WStart: {X_WStart}")
         # print(f"X_WGoal: {X_WGoal}")
 
         AddMeshcatTriad(self.meshcat, "start", X_PT=X_WStart, opacity=0.5)
@@ -417,6 +426,7 @@ class MotionPlanner(LeafSystem):
                                                                           q0, 
                                                                           obj_traj, 
                                                                           obj_catch_t,
+                                                                          current_gripper_vel,
                                                                           duration_constraint=-1,
                                                                           acceptable_pos_err=0.4,
                                                                           theta_bound = 0.5,
@@ -437,7 +447,7 @@ class MotionPlanner(LeafSystem):
         # Try again but with tighter constraints and using the last attempt as an initial guess
         trajopt_refined = KinematicTrajectoryOptimization(num_q, 10)  # 10 control points in Bspline
         prog_refined = trajopt_refined.get_mutable_prog()
-        print(f"self.original_plant.CreateDefaultContext().get_time(): {self.original_plant.CreateDefaultContext().get_time()}")
+        # print(f"self.original_plant.CreateDefaultContext().get_time(): {self.original_plant.CreateDefaultContext().get_time()}")
         start_vel_constraint, final_vel_constraint = self.add_constraints(plant, 
                                                                           plant_context, 
                                                                           plant_autodiff, 
@@ -451,6 +461,7 @@ class MotionPlanner(LeafSystem):
                                                                           q0, 
                                                                           obj_traj, 
                                                                           obj_catch_t,
+                                                                          current_gripper_vel,
                                                                           duration_constraint=obj_catch_t-self.original_plant.CreateDefaultContext().get_time())
         # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
         trajopt_refined.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
