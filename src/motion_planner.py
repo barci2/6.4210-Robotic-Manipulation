@@ -327,7 +327,8 @@ class MotionPlanner(LeafSystem):
         )
 
         # end with velocity equal to object's velocity at that moment
-        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,1) np array
+        # DIVISION BY 3 IS TEMPORARY; HAVING SUCH HIGH ENDING VELOCITY MAKES IT VERY HARD FOR SNOPT TO SOLVE
+        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]/3  # (3,1) np array
         final_vel_constraint = SpatialVelocityConstraint(
             plant_autodiff,
             plant_autodiff.world_frame(),
@@ -337,6 +338,9 @@ class MotionPlanner(LeafSystem):
             np.array([0, 0, 0.1]).reshape(-1,1),
             plant_autodiff.CreateDefaultContext(),
         )
+
+        print(f"current_gripper_vel: {current_gripper_vel}")
+        print(f"obj_vel_at_catch: {obj_vel_at_catch}")
 
         # collision constraints
         # collision_constraint = MinimumDistanceLowerBoundConstraint(
@@ -428,12 +432,17 @@ class MotionPlanner(LeafSystem):
         num_q = plant.num_positions()  # =7 (all of iiwa's joints)
         q_nominal = np.array([0.0, 0.6, 0.0, -1.75, 0.0, 1.0, 0.0])  # nominal joint for joint-centering
 
-        MAX_ITERATIONS = 4
+        # If this is the very first traj opt (so we don't yet have a very good initial guess), do an interative optimization
+        # if self.previous_compute_result is None:
+
+
+        MAX_ITERATIONS = 8
         num_iter = 0
         cur_acceptable_duration_err=0.25
         cur_acceptable_pos_err=0.1
         cur_theta_bound=0.8
-        cur_acceptable_vel_err=1.5
+        cur_acceptable_vel_err=1.0
+        final_traj = None
         while(num_iter < MAX_ITERATIONS):
             trajopt = KinematicTrajectoryOptimization(num_q, 8)  # 8 control points in Bspline
             prog = trajopt.get_mutable_prog()
@@ -473,7 +482,7 @@ class MotionPlanner(LeafSystem):
                 trajopt.SetInitialGuess(self.previous_compute_result)
             else:
                 print("using previous iter as initial guess")
-                trajopt.SetInitialGuess(solved_traj)
+                trajopt.SetInitialGuess(final_traj)
 
             start_vel_constraint, final_vel_constraint = self.add_constraints(plant, 
                                                                             plant_context, 
@@ -493,8 +502,8 @@ class MotionPlanner(LeafSystem):
                                                                             acceptable_vel_err=cur_acceptable_vel_err)
             
             # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
-            # trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
-            # trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
+            trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
+            trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
             # First solve with looser constraints
             solver = SnoptSolver()
@@ -502,24 +511,25 @@ class MotionPlanner(LeafSystem):
             if not result.is_success():
                 print(f"ERROR: num_iter={num_iter} Trajectory optimization failed: {result.get_solver_id().name()}")
                 print(result.GetInfeasibleConstraintNames(prog))
+                if final_traj is None:  # ensure final_traj is not None
+                    final_traj = trajopt.ReconstructTrajectory(result)
+                break
             else:
                 print(f"num_iter={num_iter} Solve succeeded.")
 
-            solved_traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
+            final_traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
 
-            self.VisualizePath(solved_traj, f"traj iter={num_iter}")
+            self.VisualizePath(final_traj, f"traj iter={num_iter}")
 
             # Make constraints more strict next iteration
-            cur_acceptable_duration_err *= 0.5
-            cur_acceptable_pos_err *= 0.5
-            cur_theta_bound *= 0.5
-            cur_acceptable_vel_err *= 0.5
+            cur_acceptable_duration_err *= 0.75
+            cur_acceptable_pos_err *= 0.75
+            cur_theta_bound *= 0.75
+            cur_acceptable_vel_err *= 0.75
 
             num_iter += 1
         
 
-        final_traj = solved_traj
-        
         # # Try again but with tighter constraints and using the last attempt as an initial guess
         # trajopt_refined = KinematicTrajectoryOptimization(num_q, 8)  # 8 control points in Bspline
         # prog_refined = trajopt_refined.get_mutable_prog()
