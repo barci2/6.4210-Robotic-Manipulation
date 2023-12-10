@@ -257,22 +257,20 @@ class GraspSelector(LeafSystem):
 
         # Transform the grasp pose from object frame to world frame
         X_WO = self.obj_traj.value(t)
-        print(f"\nX_WO.rotation(): {X_WO.rotation()}")
         X_WG = X_WO @ X_OG
 
         # Add cost associated with whether X_WG's y-axis points away from iiwa (which is what we want)
         # TODO: VALIDATE THIS MATH
         world_z_axis_to_X_WG_vector = np.append(X_WG.translation()[:2], 0)  # basically replacing z with 0
         world_z_axis_to_X_WG_vector = world_z_axis_to_X_WG_vector / np.linalg.norm(world_z_axis_to_X_WG_vector)
-        X_WG_y_axis_vector = np.append((X_WO @ X_OG_y_axis_vector)[:2], 0)
-        X_WG_y_axis_vector = X_WG_y_axis_vector / np.linalg.norm(X_WG_y_axis_vector)
-        # # On the order of 0 - PI
-        # direction = np.arccos(np.dot(world_z_axis_to_X_WG_vector, X_WG_y_axis_vector) / (np.linalg.norm(world_z_axis_to_X_WG_vector) * np.linalg.norm(X_WG_y_axis_vector)))
+        X_WG_y_axis_vector = (X_WG.rotation().matrix() @ np.array([[0],[1],[0]])).reshape((3,))
+        # # On the order of 0 - 2
         direction = 1 - np.dot(world_z_axis_to_X_WG_vector, X_WG_y_axis_vector)
 
-        print(f"world_z_axis_to_X_WG_vector: {world_z_axis_to_X_WG_vector}")
-        print(f"X_WG_y_axis_vector: {X_WG_y_axis_vector}")
-        print(f"direction: {direction}\n")
+        # if (direction < 0.040):
+        #     print(f"\nworld_z_axis_to_X_WG_vector: {world_z_axis_to_X_WG_vector}")
+        #     print(f"X_WG_y_axis_vector: {X_WG_y_axis_vector}")
+        #     print(f"direction: {direction}\n")
 
 
         # Add cost associated with whether object is able to fly in between two fingers of gripper
@@ -280,16 +278,17 @@ class GraspSelector(LeafSystem):
         # TODO: VALIDATE THIS MATH
         obj_vel_at_catch = self.obj_traj.EvalDerivative(t)[:3]  # (3,) np array
         obj_direction_at_catch = obj_vel_at_catch / np.linalg.norm(obj_vel_at_catch)  # normalize
-        X_OG_z_axis_vector = (X_OG.rotation().matrix() @ np.array([[0],[0],[1]])).reshape((3,))
-        X_WG_z_axis_vector = X_WO @ X_OG_z_axis_vector
-        X_WG_z_axis_vector_normalized = X_WG_z_axis_vector / np.linalg.norm(X_WG_z_axis_vector)
-        # on the order of 0 - 1
-        alignment = 1 - np.dot(obj_direction_at_catch, X_WG_z_axis_vector_normalized)
+        X_WG_z_axis_vector = (X_WG.rotation().matrix() @ np.array([[0],[0],[1]])).reshape((3,))
+        # on the order of 0 - 2
+        alignment = 1 - np.dot(obj_direction_at_catch, X_WG_z_axis_vector)
 
-        # print(f"obj_direction_at_catch: {obj_direction_at_catch}")
-        # print(f"X_OG_z_axis_vector: {X_OG_z_axis_vector}")
-        # print(f"X_WG_z_axis_vector: {X_WG_z_axis_vector_normalized}")
-        # print(f"alignment: {alignment}")
+        if (alignment < 0.010 and direction < 0.040):
+            print(f"\nworld_z_axis_to_X_WG_vector: {world_z_axis_to_X_WG_vector}")
+            print(f"X_WG_y_axis_vector: {X_WG_y_axis_vector}")
+            print(f"direction: {direction}")
+            print(f"\nobj_direction_at_catch: {obj_direction_at_catch}")
+            print(f"X_WG_z_axis_vector: {X_WG_z_axis_vector}")
+            print(f"alignment: {alignment}\n")
 
 
         # Use IK to find joint positions for the given grasp pose
@@ -312,7 +311,7 @@ class GraspSelector(LeafSystem):
         return final_cost, distance_obj_pc_centroid_to_X_OG_y_axis, direction, alignment
 
 
-    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=12, random_seed=8):
+    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=500, random_seed=9):
         """
         Args:
             - obj_pc (PointCloud object): pointcloud of the object.
@@ -344,13 +343,13 @@ class GraspSelector(LeafSystem):
 
             new_X_OG = X_OF @ RigidTransform(np.array([0, -0.05, 0]))  # Move gripper back by fixed amount
 
-            grasp_CoM_cost_threshold = 0.01  # range: 0 - 0.05
-            direction_cost_threshold = 0.02  # range: 0 - 1
-            collision_cost_threshold = 0.05  # range: 0 - 1
+            grasp_CoM_cost_threshold = 0.010  # range: 0 - 0.05
+            direction_cost_threshold = 0.040  # range: 0 - 2
+            collision_cost_threshold = 0.010  # range: 0 - 2
             new_X_OG_cost, grasp_CoM_cost, direction_cost, collision_cost = self.compute_grasp_cost(obj_pc_centroid, new_X_OG, obj_catch_t)
             # if grasp isn't above thresholds, don't even bother checking for collision
-            # if grasp_CoM_cost > grasp_CoM_cost_threshold or direction_cost > direction_cost_threshold or collision_cost > collision_cost_threshold:
-            #     return
+            if grasp_CoM_cost > grasp_CoM_cost_threshold or direction_cost > direction_cost_threshold or collision_cost > collision_cost_threshold:
+                return
 
             # check_collision takes most of the runtime
             if (self.check_collision(obj_pc, new_X_OG) is not True) and self.check_nonempty(obj_pc, new_X_OG):  # no collision, and there is an object between fingers
@@ -427,7 +426,7 @@ class GraspSelector(LeafSystem):
         obj_catch_t = 0.5*(self.obj_reachable_start_t + self.obj_reachable_end_t)
 
         start = time.time()
-        grasp_candidates = self.compute_candidate_grasps(self.obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=1)
+        grasp_candidates = self.compute_candidate_grasps(self.obj_pc, obj_pc_centroid, obj_catch_t)
         print(f"grasp sampling time: {time.time() - start}")
 
         # Visualize point cloud
