@@ -30,6 +30,7 @@ from pydrake.all import (
 from manipulation.meshcat_utils import AddMeshcatTriad
 from manipulation.utils import ConfigureParser
 from pydrake.multibody import inverse_kinematics
+from pydrake.solvers import SnoptSolver
 
 from utils import ObjectTrajectory
 
@@ -74,12 +75,22 @@ class MotionPlanner(LeafSystem):
 
         self.original_plant = original_plant
         self.meshcat = meshcat
+        self.first_compute = True
+        self.previous_compute_result = None  # BpslineTrajectory object
 
         self.DeclarePeriodicUnrestrictedUpdateEvent(0.1, 0.0, self.compute_traj)
 
 
+    def setSolverSettings(self, prog):
+        prog.SetSolverOption(SnoptSolver().solver_id(), "Feasibility tolerance", 0.001)
+        prog.SetSolverOption(SnoptSolver().solver_id(), "Major feasibility tolerance", 0.001)
+        prog.SetSolverOption(SnoptSolver().solver_id(), "Minor feasibility tolerance", 0.001)
+        prog.SetSolverOption(SnoptSolver().solver_id(), "Major optimality tolerance", 0.001)
+        prog.SetSolverOption(SnoptSolver().solver_id(), "Minor optimality tolerance", 0.001)
+
+
     # Path Visualization
-    def VisualizePath(self, traj):
+    def VisualizePath(self, traj, name):
         """
         Helper function that takes in trajopt basis and control points of Bspline
         and draws spline in meshcat.
@@ -95,9 +106,6 @@ class MotionPlanner(LeafSystem):
         traj_start_time = traj.start_time()
         traj_end_time = traj.end_time()
 
-        print(f"traj_start_time: {traj_start_time}")
-        print(f"traj_end_time: {traj_end_time}")
-
         # Build matrix of 3d positions by doing forward kinematics at time steps in the bspline
         NUM_STEPS = 75
         pos_3d_matrix = np.zeros((3,NUM_STEPS))
@@ -110,7 +118,7 @@ class MotionPlanner(LeafSystem):
             ctr += 1
 
         # Draw line
-        self.meshcat.SetLine("positions_path", pos_3d_matrix)
+        self.meshcat.SetLine(name, pos_3d_matrix)
 
 
     def build_post_catch_trajectory(self, plant, plant_context, plant_autodiff, world_frame, gripper_frame, X_WCatch, catch_vel, iiwa_catch_pos, catch_time, traj_duration = 0.25):
@@ -119,6 +127,7 @@ class MotionPlanner(LeafSystem):
 
         trajopt = KinematicTrajectoryOptimization(num_q, 6)  # 6 control points in Bspline
         prog = trajopt.get_mutable_prog()
+        self.setSolverSettings(prog)
 
         # Pick iiwa's catch position (in 7D) as initial guess for control points
         q_guess = np.tile(q0.reshape((7, 1)), (1, trajopt.num_control_points()))  # (7,4) np array
@@ -246,7 +255,7 @@ class MotionPlanner(LeafSystem):
                         duration_constraint=-1,
                         acceptable_pos_err=0.0,
                         theta_bound = 0.05,
-                        acceptable_vel_err=0.05):
+                        acceptable_vel_err=0.5):
         
         trajopt.AddPathLengthCost(1.0)
 
@@ -349,7 +358,6 @@ class MotionPlanner(LeafSystem):
         body_poses = self.get_input_port(1).Eval(context)  # "iiwa_current_pose" input port
         gripper_body_idx = self.original_plant.GetBodyByName("body").index()  # BodyIndex object
         current_gripper_pose = body_poses[gripper_body_idx]  # RigidTransform object
-        print(f"current_gripper_pose: {current_gripper_pose}")
 
         # Get current iiwa positions
         q_current = self.get_input_port(4).Eval(context)  # "iiwa_current_pose" input port
@@ -417,35 +425,41 @@ class MotionPlanner(LeafSystem):
         num_q = plant.num_positions()  # =7 (all of iiwa's joints)
         trajopt = KinematicTrajectoryOptimization(num_q, 8)  # 8 control points in Bspline
         prog = trajopt.get_mutable_prog()
+        self.setSolverSettings(prog)
+        
 
-        # First solve the IK problem for X_WGoal. Then lin interp from start pos to goal pos,
-        # use these points as control point initial guesses for the optimization.
-        ik = inverse_kinematics.InverseKinematics(plant)
-        q_variables = ik.q()  # Get variables for MathematicalProgram
-        ik_prog = ik.prog()
-        q_nominal = np.array([0.0, 0.6, 0.0, -1.75, 0.0, 1.0, 0.0])  # nominal joint for joint-centering
-        ik_prog.AddQuadraticErrorCost(np.identity(len(q_variables)), q_nominal, q_variables)
-        ik.AddPositionConstraint(
-            frameA=world_frame,
-            frameB=gripper_frame,
-            p_BQ=[0, 0, 0.1],
-            p_AQ_lower=X_WGoal.translation(),
-            p_AQ_upper=X_WGoal.translation(),
-        )
-        ik.AddOrientationConstraint(
-            frameAbar=world_frame,
-            R_AbarA=X_WGoal.rotation(),
-            frameBbar=gripper_frame,
-            R_BbarB=RotationMatrix(),
-            theta_bound=0.05,
-        )
-        ik_prog.SetInitialGuess(q_variables, q_nominal)
-        ik_result = Solve(ik_prog)
-        q_end = ik_result.GetSolution(q_variables)
-        # Guess 8 control points in 7D for Bspline
-        q_guess = np.linspace(q_current, q_end, 8).T  # (7,8) np array
-        path_guess = BsplineTrajectory(trajopt.basis(), q_guess)
-        trajopt.SetInitialGuess(path_guess)
+        if self.first_compute:
+            # First solve the IK problem for X_WGoal. Then lin interp from start pos to goal pos,
+            # use these points as control point initial guesses for the optimization.
+            ik = inverse_kinematics.InverseKinematics(plant)
+            q_variables = ik.q()  # Get variables for MathematicalProgram
+            ik_prog = ik.prog()
+            q_nominal = np.array([0.0, 0.6, 0.0, -1.75, 0.0, 1.0, 0.0])  # nominal joint for joint-centering
+            ik_prog.AddQuadraticErrorCost(np.identity(len(q_variables)), q_nominal, q_variables)
+            ik.AddPositionConstraint(
+                frameA=world_frame,
+                frameB=gripper_frame,
+                p_BQ=[0, 0, 0.1],
+                p_AQ_lower=X_WGoal.translation(),
+                p_AQ_upper=X_WGoal.translation(),
+            )
+            ik.AddOrientationConstraint(
+                frameAbar=world_frame,
+                R_AbarA=X_WGoal.rotation(),
+                frameBbar=gripper_frame,
+                R_BbarB=RotationMatrix(),
+                theta_bound=0.05,
+            )
+            ik_prog.SetInitialGuess(q_variables, q_nominal)
+            ik_result = Solve(ik_prog)
+            q_end = ik_result.GetSolution(q_variables)
+            # Guess 8 control points in 7D for Bspline
+            q_guess = np.linspace(q_current, q_end, 8).T  # (7,8) np array
+            path_guess = BsplineTrajectory(trajopt.basis(), q_guess)
+            trajopt.SetInitialGuess(path_guess)
+        else:
+            trajopt.SetInitialGuess(self.previous_compute_result)
+
 
         start_vel_constraint, final_vel_constraint = self.add_constraints(plant, 
                                                                           plant_context, 
@@ -464,7 +478,7 @@ class MotionPlanner(LeafSystem):
                                                                           duration_constraint=-1,
                                                                           acceptable_pos_err=0.4,
                                                                           theta_bound=0.5,
-                                                                          acceptable_vel_err=3.0)
+                                                                          acceptable_vel_err=2.0)
         
         # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
         trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
@@ -474,13 +488,17 @@ class MotionPlanner(LeafSystem):
         result = Solve(prog)
         if not result.is_success():
             print("ERROR: First Trajectory optimization failed: " + str(result.get_solver_id().name()))
+            print(result.GetInfeasibleConstraintNames(prog))
         else:
             print("First solve succeeded.")
         solved_traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
+
+        self.VisualizePath(solved_traj, "first solve traj")
         
         # Try again but with tighter constraints and using the last attempt as an initial guess
         trajopt_refined = KinematicTrajectoryOptimization(num_q, 8)  # 8 control points in Bspline
         prog_refined = trajopt_refined.get_mutable_prog()
+        self.setSolverSettings(prog_refined)
         start_vel_constraint, final_vel_constraint = self.add_constraints(plant, 
                                                                           plant_context, 
                                                                           plant_autodiff, 
@@ -506,6 +524,7 @@ class MotionPlanner(LeafSystem):
         result = Solve(prog_refined)
         if not result.is_success():
             print("ERROR: Second Trajectory optimization failed: " + str(result.get_solver_id().name()))
+            print(result.GetInfeasibleConstraintNames(prog_refined))
         else:
             print("Second solve succeeded.")
 
@@ -525,22 +544,31 @@ class MotionPlanner(LeafSystem):
 
         time_shifted_final_traj_end_time = time_shifted_final_traj.end_time()
 
-        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,1) np array
-        post_catch_traj = self.build_post_catch_trajectory(plant, 
-                                                           plant_context, 
-                                                           plant_autodiff, 
-                                                           world_frame, 
-                                                           gripper_frame, 
-                                                           X_WGoal, 
-                                                           obj_vel_at_catch, 
-                                                           time_shifted_final_traj.value(time_shifted_final_traj_end_time), 
-                                                           time_shifted_final_traj_end_time)
+        self.VisualizePath(time_shifted_final_traj, "final traj")
 
-        complete_traj = CompositeTrajectory([time_shifted_final_traj, post_catch_traj])
+        state.get_mutable_abstract_state(int(self._traj_index)).set_value(time_shifted_final_traj)
 
-        self.VisualizePath(complete_traj)
+        self.previous_compute_result = time_shifted_final_traj
+        
 
-        state.get_mutable_abstract_state(int(self._traj_index)).set_value(complete_traj)
+        # obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,1) np array
+        # post_catch_traj = self.build_post_catch_trajectory(plant, 
+        #                                                    plant_context, 
+        #                                                    plant_autodiff, 
+        #                                                    world_frame, 
+        #                                                    gripper_frame, 
+        #                                                    X_WGoal, 
+        #                                                    obj_vel_at_catch, 
+        #                                                    time_shifted_final_traj.value(time_shifted_final_traj_end_time), 
+        #                                                    time_shifted_final_traj_end_time)
+
+        # complete_traj = CompositeTrajectory([time_shifted_final_traj, post_catch_traj])
+
+        # self.VisualizePath(complete_traj, "complete traj")
+
+        # state.get_mutable_abstract_state(int(self._traj_index)).set_value(complete_traj)
+
+        # self.previous_compute_result = complete_traj
 
 
     def output_traj(self, context, output):
