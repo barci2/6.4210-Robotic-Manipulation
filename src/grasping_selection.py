@@ -16,11 +16,9 @@ from pydrake.all import (
     InverseKinematics,
     Solve
 )
-from manipulation import running_as_notebook
 from manipulation.meshcat_utils import AddMeshcatTriad
-from manipulation.mustard_depth_camera_example import MustardPointCloud
 from manipulation.scenarios import AddMultibodyTriad
-from manipulation.utils import ConfigureParser, LoadDataResource
+from manipulation.utils import ConfigureParser
 
 import time
 import numpy as np
@@ -365,9 +363,7 @@ class GraspSelector(LeafSystem):
         return candidate_lst
     
 
-    def SelectGrasp(self, context, output):
-        print("SelectGrasp")
-        
+    def SelectGrasp(self, context, output):      
         if self.selected_grasp_obj_frame is None:
             self.obj_pc = self.get_input_port(0).Eval(context).VoxelizedDownSample(voxel_size=0.001)
             self.obj_pc.EstimateNormals(0.05, 30)  # allows us to use obj_pc.normals() function later
@@ -376,9 +372,7 @@ class GraspSelector(LeafSystem):
             if (self.obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
                 print("received default traj (in SelectGrasp)")
                 return
-
-            print(self.obj_traj)
-
+            
             self.meshcat.SetObject("cloud", self.obj_pc)
 
             obj_pc_centroid = np.mean(self.obj_pc.xyzs(), axis=1)  # column-wise mean of 3xN np array of points

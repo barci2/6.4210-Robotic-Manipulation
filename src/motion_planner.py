@@ -9,6 +9,7 @@ from pydrake.all import (
     Trajectory,
     BsplineTrajectory,
     CompositeTrajectory,
+    PiecewisePolynomial,
     PathParameterizedTrajectory,
     KinematicTrajectoryOptimization,
     MinimumDistanceLowerBoundConstraint,
@@ -22,10 +23,10 @@ from pydrake.all import (
     Rgba,
     Quaternion,
     RotationMatrix,
-    PiecewisePolynomial
 )
 
 from manipulation.meshcat_utils import AddMeshcatTriad
+from manipulation.utils import ConfigureParser
 
 from utils import ObjectTrajectory
 
@@ -70,14 +71,14 @@ class MotionPlanner(LeafSystem):
         # self.DeclareInitializationDiscreteUpdateEvent(self.compute_traj)
 
 
-    def build_post_catch_trajectory(self, plant, plant_context, plant_autodiff, world_frame, gripper_frame, X_WCatch, catch_vel, catch_time, traj_duration = 0.25):
+    def build_post_catch_trajectory(self, plant, plant_context, plant_autodiff, world_frame, gripper_frame, X_WCatch, catch_vel, iiwa_catch_pos, catch_time, traj_duration = 0.25):
         num_q = plant.num_positions()  # =7 (all of iiwa's joints)
-        q0 = plant.GetPositions(plant_context)
+        q0 = iiwa_catch_pos
 
         trajopt = KinematicTrajectoryOptimization(num_q, 4)  # 10 control points in Bspline
         prog = trajopt.get_mutable_prog()
 
-        # Guess 10 control points in 7D
+        # Pick iiwa's catch position (in 7D) as initial guess for control points
         q_guess = np.tile(q0.reshape((7, 1)), (1, trajopt.num_control_points()))  # (7,4) np array
         q_guess[0, :] = np.linspace(0, -np.pi / 2, trajopt.num_control_points())
         path_guess = BsplineTrajectory(trajopt.basis(), q_guess)
@@ -130,8 +131,8 @@ class MotionPlanner(LeafSystem):
 
         # Calculate end position of end effector by simply integrating object's velocity starting from the catching pose
         X_WEnd = RigidTransform(X_WCatch.rotation(), X_WCatch.translation() + catch_vel.reshape((3,)) * traj_duration)
-        print(f"X_WEnd: {X_WEnd.translation()}")
-        print(f"X_WCatch: {X_WCatch.translation()}")
+        # print(f"X_WEnd: {X_WEnd.translation()}")
+        # print(f"X_WCatch: {X_WCatch.translation()}")
 
         # goal constraint
         goal_pos_constraint = PositionConstraint(
@@ -253,10 +254,20 @@ class MotionPlanner(LeafSystem):
             np.eye(num_q), q0, trajopt.control_points()[:, -1]
         )
 
-        # start with zero velocity
-        trajopt.AddPathVelocityConstraint(
-            np.zeros((num_q, 1)), np.zeros((num_q, 1)), 0
+        # start with velocity equal to iiwa's current velocity
+        current_iiwa_vel = plant.EvalBodySpatialVelocityInWorld(plant_context, plant.GetBodyByName("iiwa_link_7")).get_coeffs()[3:]
+        print(f"current_vel: {current_iiwa_vel}")
+        # Current limitation: SpatialVelocityConstraint only takes into account translational velocity; not rotational
+        start_vel_constraint = SpatialVelocityConstraint(
+            plant_autodiff,
+            plant_autodiff.world_frame(),
+            current_iiwa_vel,  # upper limit
+            current_iiwa_vel,  # lower limit
+            plant_autodiff.GetFrameByName("iiwa_link_7"),
+            np.array([0, 0, 0]).reshape(-1,1),  # purposely don't add gripper offset here; we just want link7 to follow the current velocity of link7
+            plant_autodiff.CreateDefaultContext(),
         )
+
         # end with velocity equal to object's velocity at that moment
         obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,1) np array
         final_vel_constraint = SpatialVelocityConstraint(
@@ -277,7 +288,7 @@ class MotionPlanner(LeafSystem):
         # for s in evaluate_at_s:
         #     trajopt.AddPathPositionConstraint(collision_constraint, s)
 
-        return final_vel_constraint
+        return start_vel_constraint, final_vel_constraint
     
 
     def compute_traj(self, context, state):
@@ -363,25 +374,26 @@ class MotionPlanner(LeafSystem):
             plant.GetVelocityLowerLimits(), plant.GetVelocityUpperLimits()
         )
 
-        final_vel_constraint = self.add_constraints(plant, 
-                                            plant_context, 
-                                            plant_autodiff, 
-                                            trajopt, 
-                                            prog, 
-                                            world_frame, 
-                                            gripper_frame, 
-                                            X_WStart, 
-                                            X_WGoal, 
-                                            num_q, 
-                                            q0, 
-                                            obj_traj, 
-                                            obj_catch_t,
-                                            duration_constraint=-1,
-                                            acceptable_pos_err=0.4,
-                                            theta_bound = 0.5,
-                                            acceptable_vel_err=3.0)
+        start_vel_constraint, final_vel_constraint = self.add_constraints(plant, 
+                                                                          plant_context, 
+                                                                          plant_autodiff, 
+                                                                          trajopt, 
+                                                                          prog, 
+                                                                          world_frame, 
+                                                                          gripper_frame, 
+                                                                          X_WStart, 
+                                                                          X_WGoal, 
+                                                                          num_q, 
+                                                                          q0, 
+                                                                          obj_traj, 
+                                                                          obj_catch_t,
+                                                                          duration_constraint=-1,
+                                                                          acceptable_pos_err=0.4,
+                                                                          theta_bound = 0.5,
+                                                                          acceptable_vel_err=3.0)
         
         # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
+        trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
         trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
         # First solve with looser constraints
@@ -396,24 +408,56 @@ class MotionPlanner(LeafSystem):
         trajopt_refined = KinematicTrajectoryOptimization(num_q, 10)  # 10 control points in Bspline
         prog_refined = trajopt_refined.get_mutable_prog()
         print(f"self.original_plant.CreateDefaultContext().get_time(): {self.original_plant.CreateDefaultContext().get_time()}")
-        final_vel_constraint = self.add_constraints(plant, 
-                                            plant_context, 
-                                            plant_autodiff, 
-                                            trajopt_refined, 
-                                            prog_refined, 
-                                            world_frame, 
-                                            gripper_frame, 
-                                            X_WStart, 
-                                            X_WGoal, 
-                                            num_q, 
-                                            q0, 
-                                            obj_traj, 
-                                            obj_catch_t,
-                                            duration_constraint=obj_catch_t-self.original_plant.CreateDefaultContext().get_time())
+        start_vel_constraint, final_vel_constraint = self.add_constraints(plant, 
+                                                                          plant_context, 
+                                                                          plant_autodiff, 
+                                                                          trajopt_refined, 
+                                                                          prog_refined, 
+                                                                          world_frame, 
+                                                                          gripper_frame, 
+                                                                          X_WStart, 
+                                                                          X_WGoal, 
+                                                                          num_q, 
+                                                                          q0, 
+                                                                          obj_traj, 
+                                                                          obj_catch_t,
+                                                                          duration_constraint=obj_catch_t-self.original_plant.CreateDefaultContext().get_time())
         # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
+        trajopt_refined.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
         trajopt_refined.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
         trajopt_refined.SetInitialGuess(solved_traj)
+
+        # Path Visualization
+        def PlotPath(control_points):
+            traj = BsplineTrajectory(
+                trajopt_refined.basis(), control_points.reshape((7, -1))
+            )
+
+            # Build a new plant to do the forward kinematics to turn this Bspline into 3D coordinates
+            builder = DiagramBuilder()
+            vis_plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
+            viz_iiwa = Parser(vis_plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
+            vis_plant.WeldFrames(vis_plant.world_frame(), vis_plant.GetFrameByName("base"))
+            vis_plant.Finalize()
+            vis_plant_context = vis_plant.CreateDefaultContext()
+            pos_3d_matrix = np.zeros((3,50))
+            ctr = 0
+            for vis_t in np.linspace(0, 1, 50):
+                iiwa_pos = traj.value(vis_t)
+                vis_plant.SetPositions(vis_plant_context, viz_iiwa, iiwa_pos)
+                pos_3d = vis_plant.CalcRelativeTransform(vis_plant_context, vis_plant.world_frame(), vis_plant.GetFrameByName("iiwa_link_7")).translation()
+                pos_3d_matrix[:,ctr] = pos_3d
+                ctr += 1
+
+            print(f"pos_3d_matrix: {pos_3d_matrix}")
+
+            self.meshcat.SetLine("positions_path", pos_3d_matrix)
+
+        prog_refined.AddVisualizationCallback(
+            PlotPath, trajopt_refined.control_points().reshape((-1,))
+        )
+
         result = Solve(prog_refined)
         if not result.is_success():
             print("ERROR: Second Trajectory optimization failed: " + str(result.get_solver_id().name()))
@@ -424,7 +468,7 @@ class MotionPlanner(LeafSystem):
         final_traj_end_time = final_traj.end_time()
 
         obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,1) np array
-        post_catch_traj = self.build_post_catch_trajectory(plant, plant_context, plant_autodiff, world_frame, gripper_frame, X_WGoal, obj_vel_at_catch, final_traj_end_time)
+        post_catch_traj = self.build_post_catch_trajectory(plant, plant_context, plant_autodiff, world_frame, gripper_frame, X_WGoal, obj_vel_at_catch, final_traj.value(final_traj_end_time), final_traj_end_time)
 
         complete_traj = CompositeTrajectory([final_traj, post_catch_traj])
 
