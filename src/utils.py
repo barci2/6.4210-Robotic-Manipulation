@@ -52,8 +52,10 @@ def visualize_camera_plt(diagram: Diagram, camera_name: str, context=None, plt_s
     plt.show()
 
 
-def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str) -> None:
+def throw_object1(plant: MultibodyPlant, plant_context: Context, obj_name: str) -> None:
     """
+    Version 1 (from further away, higher velocity)
+
     Move object to throwing position, generate initial velocity for object, then unfreeze its dynamics
 
     Args:
@@ -84,6 +86,64 @@ def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str) -
 
     v_magnitude = np.random.uniform(4.75, 5.0)
     angle_perturb = np.random.uniform(0.09, 0.10) * np.random.choice(
+        [-1, 1]
+    )  # must perturb by at least 0.1 rad to avoid throwing directly at iiwa
+    # ensure the perturbation is applied such that it directs the obj away from iiwa
+    if x * y > 0:  # x and y have same sign
+        cos_alpha = x / np.sqrt(x**2 + y**2) + angle_perturb
+        sin_alpha = y / np.sqrt(x**2 + y**2) - angle_perturb
+    else:
+        cos_alpha = x / np.sqrt(x**2 + y**2) + angle_perturb
+        sin_alpha = y / np.sqrt(x**2 + y**2) + angle_perturb
+    z_perturb = np.random.uniform(-0.5, 0.5)
+    v_x = -v_magnitude * cos_alpha
+    v_y = -v_magnitude * sin_alpha
+    v_z = 3.8 + z_perturb
+
+    # Define the spatial velocity
+    spatial_velocity = SpatialVelocity(
+        v=np.array([v_x, v_y, v_z]),  # m/s
+        w=np.array([0, 0, 0]),  # rad/s
+    )
+    plant.SetFreeBodySpatialVelocity(
+        context=plant_context, body=body, V_WB=spatial_velocity
+    )
+
+
+def throw_object2(plant: MultibodyPlant, plant_context: Context, obj_name: str) -> None:
+    """
+    Version 2 (closer, lower velocity, catching closer to peak of traj)
+
+    Move object to throwing position, generate initial velocity for object, then unfreeze its dynamics
+
+    Args:
+        plant: MultbodyPlant from hardware station
+        plant_context: plant's context
+        obj_name: string of the object's name in the scenario YAML (i.e. 'ycb2')
+    """
+
+    # Getting relevant data from plant
+    model_instance = plant.GetModelInstanceByName(
+        obj_name)  # ModelInstance object
+    joint_idx = plant.GetJointIndices(model_instance)[0]  # JointIndex object
+    joint = plant.get_joint(joint_idx)  # Joint object
+
+    # Generate random object pose
+    z = 0.25  # fixed z for now
+    x = np.random.uniform(1.7, 1.9) * np.random.choice([-1, 1])
+    y = np.random.uniform(1.7, 1.9) * np.random.choice([-1, 1])
+
+    # Set object pose
+    body_idx = plant.GetBodyIndices(model_instance)[0]  # BodyIndex object
+    body = plant.get_body(body_idx)  # Body object
+    pose = RigidTransform(RotationMatrix(), [x, y, z])
+    plant.SetFreeBodyPose(plant_context, body, pose)
+
+    # Unlock joint so object is subject to gravity
+    joint.Unlock(plant_context)
+
+    v_magnitude = np.random.uniform(3.9, 4.0)
+    angle_perturb = np.random.uniform(0.10, 0.11) * np.random.choice(
         [-1, 1]
     )  # must perturb by at least 0.1 rad to avoid throwing directly at iiwa
     # ensure the perturbation is applied such that it directs the obj away from iiwa

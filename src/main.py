@@ -3,10 +3,10 @@ from pydrake.all import (
     StartMeshcat,
     Simulator,
     ModelInstanceIndex,
-    PiecewisePolynomial,
-    PortSwitch,
-    TrajectorySource,
-    RigidTransform
+    InverseDynamicsController,
+    RigidTransform,
+    AddMultibodyPlantSceneGraph,
+    Parser
 )
 from manipulation.station import MakeHardwareStation, load_scenario
 import matplotlib.pyplot as plt
@@ -17,7 +17,8 @@ import os
 import time
 from utils import (
     diagram_visualize_connections,
-    throw_object,
+    throw_object1,
+    throw_object2,
     ObjectTrajectory
 )
 from perception import PointCloudGenerator, TrajectoryPredictor, add_cameras
@@ -138,6 +139,17 @@ builder.Connect(motion_planner.GetOutputPort("wsg_command"), station.GetInputPor
 # print(station.GetInputPort("iiwa.desired_acceleration"))
 
 
+# # Build a new plant to do calculate the velocity Jacobian
+# idc_builder = DiagramBuilder()
+# idc_plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
+# idc_iiwa = Parser(idc_plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
+# idc_plant.WeldFrames(idc_plant.world_frame(), idc_plant.GetFrameByName("base"))
+# idc_plant.Finalize()
+
+# controller = builder.AddSystem(InverseDynamicsController(idc_plant, [100]*7, [1]*7, [20]*7, True))
+# builder.Connect(controller.GetOutputPort("generalized_force"), plant.GetInputPort("iiwa_actuation"))
+
+
 ### Finalizing diagram setup
 diagram = builder.Build()
 context = diagram.CreateDefaultContext()
@@ -156,8 +168,8 @@ plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
 # print(station.GetOutputPort("body_poses").Eval(station_context)[plant.GetBodyByName("body", plant.GetModelInstanceByName("wsg")).index()])
 
 
-### Opening the gripper
-# station.GetInputPort("iiwa.position").FixValue(station_context, np.zeros(7)) # TESTING
+### Testing hardware
+# station.GetInputPort("iiwa.desired_state").FixValue(station_context, np.zeros(14)) # TESTING
 # station.GetInputPort("wsg.position").FixValue(station_context, [1]) # TESTING
 
 
@@ -170,7 +182,7 @@ obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableCont
 
 
 
-throw_object(plant, plant_context, obj_name)
+throw_object1(plant, plant_context, obj_name)
 
 # plt.imshow(icp_cameras[17].depth_image_32F_output_port().Eval(icp_cameras[17].GetMyContextFromRoot(simulator_context)).data[::-1])
 # plt.show()

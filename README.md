@@ -11,8 +11,13 @@ See https://drake.mit.edu/installation.html
 
 Our recommended setup requires using a Linux machine, or using WSL2 on Windows, with the following requirements:
 - `python` 3.8 or higher
-- `pip` 20.3 or higher
-- `pip install manipulation --upgrade --extra-index-url https://drake-packages.csail.mit.edu/whl/nightly/`
+- `pip` 23.3.1 or higher
+
+Necessary installs:
+- `pip install manipulation
+- `pip install --extra-index-url https://drake-packages.csail.mit.edu/whl/nightly/ 'drake==0.0.20231210'` (or any newer version of drake)
+- `pip install ipython`
+- `pip install pyvirtualdisplay`
 
 If you are running WSL2 on Windows, ensure you install the following to enable the graphics libraries to work:
  - `sudo apt install mesa-utils`
