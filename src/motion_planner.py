@@ -327,7 +327,7 @@ class MotionPlanner(LeafSystem):
 
         # end with velocity equal to object's velocity at that moment
         # DIVISION BY 3 IS TEMPORARY; HAVING SUCH HIGH ENDING VELOCITY MAKES IT VERY HARD FOR SNOPT TO SOLVE
-        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)*0.25  # (3,1) np array
+        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)*0.4  # (3,1) np array
         final_vel_constraint = SpatialVelocityConstraint(
             plant_autodiff,
             plant_autodiff.world_frame(),
