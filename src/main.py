@@ -137,17 +137,14 @@ motion_planner = builder.AddSystem(MotionPlanner(plant, meshcat))
 builder.Connect(grasp_selector.GetOutputPort("grasp_selection"), motion_planner.GetInputPort("grasp_selection"))
 builder.Connect(station.GetOutputPort("body_poses"), motion_planner.GetInputPort("iiwa_current_pose"))
 builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), motion_planner.GetInputPort("object_trajectory"))
-# builder.Connect(station.GetOutputPort("iiwa.state_estimated"), motion_planner.GetInputPort("iiwa_state"))
 builder.Connect(station.GetOutputPort("iiwa_state"), motion_planner.GetInputPort("iiwa_state"))
-# builder.Connect(motion_planner.GetOutputPort("iiwa_command"), station.GetInputPort("iiwa.desired_state"))
 builder.Connect(motion_planner.GetOutputPort("wsg_command"), station.GetInputPort("wsg.position"))
 
 
-# Make the plant for the iiwa controller to use.
+# Implement inverse dynamics controller for feedforward acceleration
 controller_plant = MultibodyPlant(time_step=0.001)
 controller_iiwa = AddIiwa(controller_plant)
-# controller_iiwa = Parser(controller_plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
-# AddWsg(controller_plant, controller_iiwa, welded=True)
+controller_iiwa = Parser(controller_plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
 controller_plant.Finalize()
 num_iiwa_positions = controller_plant.num_positions()
 controller = builder.AddSystem(InverseDynamicsController(controller_plant, [100]*num_iiwa_positions, [1]*num_iiwa_positions, [20]*num_iiwa_positions, True))
@@ -173,8 +170,6 @@ simulator_context = simulator.get_mutable_context()
 station_context = station.GetMyMutableContextFromRoot(simulator_context)
 plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
 
-# print(station.GetOutputPort("body_poses").Eval(station_context)[plant.GetBodyByName("body", plant.GetModelInstanceByName("wsg")).index()])
-
 
 ### Testing hardware
 # station.GetInputPort("iiwa.desired_state").FixValue(station_context, np.zeros(14)) # TESTING
@@ -189,9 +184,9 @@ plant.SetFreeBodyPose(plant_context, body, RigidTransform(point_cloud_cameras_ce
 obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableContextFromRoot(simulator_context))
 
 
-
 throw_object1(plant, plant_context, obj_name)
 
+# Example camera view
 # plt.imshow(icp_cameras[17].depth_image_32F_output_port().Eval(icp_cameras[17].GetMyContextFromRoot(simulator_context)).data[::-1])
 # plt.show()
 

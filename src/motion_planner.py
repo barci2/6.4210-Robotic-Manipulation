@@ -531,12 +531,13 @@ class MotionPlanner(LeafSystem):
 
                 # Also set the WSG trajectory once (this doesn't need to be updated in future cycles)
                 close_time = 0.05
+                time_offset = -0.033
                 wsg_open_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
-                    [0, obj_catch_t],
+                    [0, obj_catch_t+time_offset],
                     np.array([[1, 1]])
                 )
                 wsg_close_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
-                    [obj_catch_t, obj_catch_t+close_time],
+                    [obj_catch_t+time_offset, obj_catch_t+time_offset+close_time],
                     np.array([[1, 0]]) 
                 )
 
@@ -609,13 +610,13 @@ class MotionPlanner(LeafSystem):
         
         self.obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)
 
-        self.q_end = self.build_post_catch_trajectory(plant, 
-                                                world_frame, 
-                                                gripper_frame, 
-                                                X_WGoal, 
-                                                obj_vel_at_catch, 
-                                                time_shifted_final_traj.value(time_shifted_final_traj.end_time()), 
-                                                time_shifted_final_traj.end_time())
+        # self.q_end = self.build_post_catch_trajectory(plant, 
+        #                                         world_frame, 
+        #                                         gripper_frame, 
+        #                                         X_WGoal, 
+        #                                         obj_vel_at_catch, 
+        #                                         time_shifted_final_traj.value(time_shifted_final_traj.end_time()), 
+        #                                         time_shifted_final_traj.end_time())
 
         # post_catch_traj = self.build_post_catch_trajectory(plant, 
         #                                                    world_frame, 

@@ -258,7 +258,6 @@ class GraspSelector(LeafSystem):
         X_WG = X_WO @ X_OG
 
         # Add cost associated with whether X_WG's y-axis points away from iiwa (which is what we want)
-        # TODO: VALIDATE THIS MATH
         world_z_axis_to_X_WG_vector = np.append(X_WG.translation()[:2], 0)  # basically replacing z with 0
         world_z_axis_to_X_WG_vector = world_z_axis_to_X_WG_vector / np.linalg.norm(world_z_axis_to_X_WG_vector)
         X_WG_y_axis_vector = (X_WG.rotation().matrix() @ np.array([[0],[1],[0]])).reshape((3,))
@@ -267,12 +266,11 @@ class GraspSelector(LeafSystem):
 
         # Add cost associated with whether object is able to fly in between two fingers of gripper
         # Z-axis of gripper should be aligned with derivative of obj trajectory
-        # TODO: VALIDATE THIS MATH
         obj_vel_at_catch = self.obj_traj.EvalDerivative(t)[:3]  # (3,) np array
         obj_direction_at_catch = obj_vel_at_catch / np.linalg.norm(obj_vel_at_catch)  # normalize
         X_WG_z_axis_vector = (X_WG.rotation().matrix() @ np.array([[0],[0],[1]])).reshape((3,))
-        # on the order of 0 - 2
-        alignment = 1 - np.dot(obj_direction_at_catch, X_WG_z_axis_vector)
+        # on the order of 0 - 1
+        alignment = 1 - np.absolute(np.dot(obj_direction_at_catch, X_WG_z_axis_vector))  # absolute since it's ok for gripper z-axis to be perfectly against obj velocity
 
         # if (alignment < 0.010 and direction < 0.040):
         #     print(f"\nworld_z_axis_to_X_WG_vector: {world_z_axis_to_X_WG_vector}")
