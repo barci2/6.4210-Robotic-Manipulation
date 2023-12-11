@@ -5,9 +5,8 @@ from pydrake.all import (
     ModelInstanceIndex,
     InverseDynamicsController,
     RigidTransform,
-    AddMultibodyPlantSceneGraph,
     MultibodyPlant,
-    Parser
+    RotationMatrix
 )
 # from manipulation.station import MakeHardwareStation, load_scenario
 from station import MakeHardwareStation, load_scenario
@@ -21,15 +20,13 @@ import os
 import time
 from utils import (
     diagram_visualize_connections,
-    throw_object1,
-    throw_object2,
+    throw_object,
     ObjectTrajectory
 )
 from perception import PointCloudGenerator, TrajectoryPredictor, add_cameras
 
 from grasping_selection import GraspSelector
 from motion_planner import MotionPlanner
-from motion_tests import motion_test  # TEMPORARY
 
 ##### Settings #####
 seed = 135
@@ -38,7 +35,7 @@ scenario_file = "data/scenario.yaml"
 thrown_obj_prefix = "obj"
 this_drake_module_name = "cwd"
 point_cloud_cameras_center = [0, 0, 100]
-simulator_runtime = 1
+simulator_runtime = 1.5
 
 np.random.seed(seed)
 
@@ -183,8 +180,11 @@ body = plant.get_body(body_idx)
 plant.SetFreeBodyPose(plant_context, body, RigidTransform(point_cloud_cameras_center))
 obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableContextFromRoot(simulator_context))
 
+# For mustard bottle:
+# throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 6))
+# For banana:
+throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(-np.pi / 3))
 
-throw_object1(plant, plant_context, obj_name)
 
 # Example camera view
 # plt.imshow(icp_cameras[17].depth_image_32F_output_port().Eval(icp_cameras[17].GetMyContextFromRoot(simulator_context)).data[::-1])

@@ -296,10 +296,6 @@ class GraspSelector(LeafSystem):
         """
 
         # Constants for random variation
-        x_min = -0.03
-        x_max = 0.03
-        phi_min = -np.pi / 3
-        phi_max = np.pi / 3
         np.random.seed(random_seed)
 
         # Build KD tree for the pointcloud.
@@ -308,28 +304,20 @@ class GraspSelector(LeafSystem):
 
         candidate_lst = {}  # dict mapping candidates (given by RigidTransforms) to cost of that candidate
 
-        def compute_candidate(idx, obj_pc, kdtree, ball_radius, x_min, x_max, phi_min, phi_max, candidate_lst_lock, candidate_lst):
+        def compute_candidate(idx, obj_pc, kdtree, ball_radius, candidate_lst_lock, candidate_lst):
             X_OF = self.compute_darboux_frame(idx, obj_pc, kdtree, ball_radius)  # find Darboux frame of random point
-
-            # Compute random x-translation and z-rotation to modify gripper pose
-            # random_x = np.random.uniform(x_min, x_max)
-            # random_z_rot = np.random.uniform(phi_min, phi_max)
-            # X_WG = X_WF @ RigidTransform(RotationMatrix.MakeZRotation(random_z_rot), np.array([random_x, 0, 0]))
 
             new_X_OG = X_OF @ RigidTransform(np.array([0, -0.05, 0]))  # Move gripper back by fixed amount
 
-            # grasp_CoM_cost_threshold = 0.020  # range: 0 - 0.05
-            # direction_cost_threshold = 0.050  # range: 0 - 2
-            # collision_cost_threshold = 0.025  # range: 0 - 2
-            grasp_CoM_cost_threshold = 0.020  # range: 0 - 0.05
-            direction_cost_threshold = 0.500  # range: 0 - 2
-            collision_cost_threshold = 0.030  # range: 0 - 2
+            grasp_CoM_cost_threshold = 0.040  # range: 0 - 0.05
+            direction_cost_threshold = 0.750  # range: 0 - 2
+            collision_cost_threshold = 0.250  # range: 0 - 2
             new_X_OG_cost, grasp_CoM_cost, direction_cost, collision_cost = self.compute_grasp_cost(obj_pc_centroid, new_X_OG, obj_catch_t)
             # if grasp isn't above thresholds, don't even bother checking for collision
             if grasp_CoM_cost > grasp_CoM_cost_threshold or direction_cost > direction_cost_threshold or collision_cost > collision_cost_threshold:
                 return
             
-            print("passed thresholds")
+            print("passed grasping thresholds")
 
             # check_collision takes most of the runtime
             if (self.check_collision(obj_pc, new_X_OG) is not True) and self.check_nonempty(obj_pc, new_X_OG):  # no collision, and there is an object between fingers
@@ -346,10 +334,6 @@ class GraspSelector(LeafSystem):
                                                                 obj_pc, 
                                                                 kdtree, 
                                                                 ball_radius, 
-                                                                x_min, 
-                                                                x_max, 
-                                                                phi_min, 
-                                                                phi_max, 
                                                                 candidate_lst_lock, 
                                                                 candidate_lst))
             threads.append(t)

@@ -327,7 +327,7 @@ class MotionPlanner(LeafSystem):
 
         # end with velocity equal to object's velocity at that moment
         # DIVISION BY 3 IS TEMPORARY; HAVING SUCH HIGH ENDING VELOCITY MAKES IT VERY HARD FOR SNOPT TO SOLVE
-        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)*0.4  # (3,1) np array
+        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)*0.3  # (3,1) np array
         final_vel_constraint = SpatialVelocityConstraint(
             plant_autodiff,
             plant_autodiff.world_frame(),
@@ -420,8 +420,8 @@ class MotionPlanner(LeafSystem):
         X_WGoal = X_WG
         # print(f"X_WStart: {X_WStart}")
         # print(f"X_WGoal: {X_WGoal}")
-        AddMeshcatTriad(self.meshcat, "start", X_PT=X_WStart, opacity=0.5)
-        self.meshcat.SetTransform("start", X_WStart)
+        # AddMeshcatTriad(self.meshcat, "start", X_PT=X_WStart, opacity=0.5)
+        # self.meshcat.SetTransform("start", X_WStart)
         AddMeshcatTriad(self.meshcat, "goal", X_PT=X_WGoal, opacity=0.5)
         self.meshcat.SetTransform("goal", X_WGoal)
 
@@ -531,7 +531,7 @@ class MotionPlanner(LeafSystem):
 
                 # Also set the WSG trajectory once (this doesn't need to be updated in future cycles)
                 close_time = 0.05
-                time_offset = -0.033
+                time_offset = -0.02
                 wsg_open_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
                     [0, obj_catch_t+time_offset],
                     np.array([[1, 1]])

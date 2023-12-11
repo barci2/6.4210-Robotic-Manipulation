@@ -48,13 +48,29 @@ directives:
 # Object Setup #
 ################
 
+# - add_model:
+#     name: "obj_tennis_ball"
+#     file: "package://cwd/data/Tennis_ball.sdf"
+#     default_free_body_pose:
+#         "Tennis_ball":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
+
 - add_model:
-    name: "obj_tennis_ball"
-    file: "package://cwd/data/Tennis_ball.sdf"
+    name: "obj_banana"
+    file: "package://cwd/data/Banana.sdf"
     default_free_body_pose:
-        "Tennis_ball":
+        "Banana":
             translation: [0, 0, 100]
             rotation: !Rpy { deg: [0, 0, 0] }
+
+# - add_model:
+#     name: "obj_mustard_bottle"
+#     file: "package://drake/manipulation/models/ycb/sdf/006_mustard_bottle.sdf"
+#     default_free_body_pose:
+#         "base_link_mustard":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
 
 # - add_model:
 #     name: "obj_sugar_box"
@@ -84,14 +100,6 @@ directives:
 #     name: "obj_cracker_box" "package://drake/manipulation/models/ycb/sdf/003_cracker_box.sdf"
 #     default_free_body_pose:
 #         "base_link_cracker":
-#             translation: [0, 0, 100]
-#             rotation: !Rpy { deg: [0, 0, 0] }
-
-# - add_model:
-#     name: "obj_mustard_bottle"
-#     file: "package://drake/manipulation/models/ycb/sdf/006_mustard_bottle.sdf"
-#     default_free_body_pose:
-#         "base_link_mustard":
 #             translation: [0, 0, 100]
 #             rotation: !Rpy { deg: [0, 0, 0] }
 
