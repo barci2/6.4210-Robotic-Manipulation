@@ -6,9 +6,13 @@ from pydrake.all import (
     InverseDynamicsController,
     RigidTransform,
     AddMultibodyPlantSceneGraph,
+    MultibodyPlant,
     Parser
 )
-from manipulation.station import MakeHardwareStation, load_scenario
+# from manipulation.station import MakeHardwareStation, load_scenario
+from station import MakeHardwareStation, load_scenario
+from manipulation.scenarios import AddIiwa
+
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
@@ -92,7 +96,7 @@ point_cloud_cameras, point_cloud_camera_transforms = add_cameras(
     camera_height=600,
     horizontal_num=8,
     vertical_num=4,
-    camera_distance=5,
+    camera_distance=6,
     cameras_center=point_cloud_cameras_center
 )
 
@@ -112,7 +116,7 @@ traj_pred_system = builder.AddSystem(TrajectoryPredictor(
     cameras=icp_cameras,
     camera_transforms=icp_camera_transforms,
     pred_thresh=5,
-    pred_samples_thresh=2,  # how many views of object are needed before outputting predicted traj
+    pred_samples_thresh=3,  # how many views of object are needed before outputting predicted traj
     thrown_model_name=obj_name,
     ransac_iters=20,
     ransac_thresh=0.01,
@@ -133,21 +137,25 @@ motion_planner = builder.AddSystem(MotionPlanner(plant, meshcat))
 builder.Connect(grasp_selector.GetOutputPort("grasp_selection"), motion_planner.GetInputPort("grasp_selection"))
 builder.Connect(station.GetOutputPort("body_poses"), motion_planner.GetInputPort("iiwa_current_pose"))
 builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), motion_planner.GetInputPort("object_trajectory"))
-builder.Connect(station.GetOutputPort("iiwa.state_estimated"), motion_planner.GetInputPort("iiwa_state"))
-builder.Connect(motion_planner.GetOutputPort("iiwa_command"), station.GetInputPort("iiwa.desired_state"))
+# builder.Connect(station.GetOutputPort("iiwa.state_estimated"), motion_planner.GetInputPort("iiwa_state"))
+builder.Connect(station.GetOutputPort("iiwa_state"), motion_planner.GetInputPort("iiwa_state"))
+# builder.Connect(motion_planner.GetOutputPort("iiwa_command"), station.GetInputPort("iiwa.desired_state"))
 builder.Connect(motion_planner.GetOutputPort("wsg_command"), station.GetInputPort("wsg.position"))
-# print(station.GetInputPort("iiwa.desired_acceleration"))
 
 
-# # Build a new plant to do calculate the velocity Jacobian
-# idc_builder = DiagramBuilder()
-# idc_plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=0.001)
-# idc_iiwa = Parser(idc_plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
-# idc_plant.WeldFrames(idc_plant.world_frame(), idc_plant.GetFrameByName("base"))
-# idc_plant.Finalize()
+# Make the plant for the iiwa controller to use.
+controller_plant = MultibodyPlant(time_step=0.001)
+controller_iiwa = AddIiwa(controller_plant)
+# controller_iiwa = Parser(controller_plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
+# AddWsg(controller_plant, controller_iiwa, welded=True)
+controller_plant.Finalize()
+num_iiwa_positions = controller_plant.num_positions()
+controller = builder.AddSystem(InverseDynamicsController(controller_plant, [100]*num_iiwa_positions, [1]*num_iiwa_positions, [20]*num_iiwa_positions, True))
+builder.Connect(station.GetOutputPort("iiwa_state"), controller.GetInputPort("estimated_state"))
+builder.Connect(motion_planner.GetOutputPort("iiwa_command"), controller.GetInputPort("desired_state"))
+builder.Connect(motion_planner.GetOutputPort("iiwa_acceleration"), controller.GetInputPort("desired_acceleration"))
+builder.Connect(controller.GetOutputPort("generalized_force"), station.GetInputPort("iiwa.actuation"))
 
-# controller = builder.AddSystem(InverseDynamicsController(idc_plant, [100]*7, [1]*7, [20]*7, True))
-# builder.Connect(controller.GetOutputPort("generalized_force"), plant.GetInputPort("iiwa_actuation"))
 
 
 ### Finalizing diagram setup

@@ -9,8 +9,8 @@
 model_drivers:
     # iiwa: !IiwaDriver
     #     hand_model_name: wsg
-    iiwa: !InverseDynamicsDriver {}  # Use InverseDynamicsDriver directly for feedforward velocity (results in better traj following)
-    # iiwa: !ForceDriver {}
+    # iiwa: !InverseDynamicsDriver {}  # Use InverseDynamicsDriver directly for feedforward velocity (results in better traj following)
+    iiwa: !ForceDriver {}
     wsg: !SchunkWsgDriver {}
 
 directives:

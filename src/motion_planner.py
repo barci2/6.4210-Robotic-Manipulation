@@ -76,11 +76,17 @@ class MotionPlanner(LeafSystem):
         )
 
         self.DeclareVectorOutputPort(
+            "iiwa_acceleration", 7, self.output_acceleration
+        )
+
+        self.DeclareVectorOutputPort(
             "wsg_command", 1, self.output_wsg_traj  # 7 pos, 7 vel
         )
 
         self.original_plant = original_plant
         self.meshcat = meshcat
+        self.q_nominal = np.array([0.0, 0.6, 0.0, -1.75, 0.0, 1.0, 0.0])  # nominal joint for joint-centering
+        self.q_end = None
         self.previous_compute_result = None  # BpslineTrajectory object
 
         self.DeclarePeriodicUnrestrictedUpdateEvent(0.025, 0.0, self.compute_traj)
@@ -128,31 +134,28 @@ class MotionPlanner(LeafSystem):
 
     def build_post_catch_trajectory(self, 
                                     plant, 
-                                    plant_context,
-                                    plant_autodiff,
                                     world_frame, 
-                                    gripper_frame, 
-                                    q_nominal, 
+                                    gripper_frame,  
                                     X_WCatch, 
                                     catch_vel, 
                                     iiwa_catch_pos, 
                                     catch_time, 
-                                    traj_duration=0.15
+                                    traj_duration=0.1
                                     ):
         
-        # Calculate end position of end effector by simply integrating object's velocity starting from the catching pose
-        X_WEnd = RigidTransform(X_WCatch.rotation(), X_WCatch.translation() + catch_vel.reshape((3,)) * traj_duration)
-        print(f"X_WCatch: {X_WCatch.translation()}")
-        print(f"X_WEnd: {X_WEnd.translation()}")
+        # Assuming gripper continues at catch_vel for traj_duration time, figure out where iiwa ends up
+        X_WEnd = RigidTransform(X_WCatch.rotation(), X_WCatch.translation() + catch_vel*traj_duration)
 
-        num_q = plant.num_positions()  # =7 (all of iiwa's joints)
-        q0 = iiwa_catch_pos.reshape((7,))
+        print(f"X_WCatch: {X_WCatch}")
+        print(f"X_WEnd: {X_WEnd}")
+
+        link_7_to_gripper_transform = RotationMatrix.MakeZRotation(np.pi / 2) @ RotationMatrix.MakeXRotation(np.pi / 2)
 
         # Use IK to turn this into joint coords
         ik = inverse_kinematics.InverseKinematics(plant)
         q_variables = ik.q()  # Get variables for MathematicalProgram
         ik_prog = ik.prog()
-        ik_prog.AddQuadraticErrorCost(np.identity(len(q_variables)), q_nominal, q_variables)
+        ik_prog.AddQuadraticErrorCost(np.identity(len(q_variables)), self.q_nominal, q_variables)
         ik.AddPositionConstraint(
             frameA=world_frame,
             frameB=gripper_frame,
@@ -164,10 +167,10 @@ class MotionPlanner(LeafSystem):
             frameAbar=world_frame,
             R_AbarA=X_WEnd.rotation(),
             frameBbar=gripper_frame,
-            R_BbarB=RotationMatrix(),
+            R_BbarB=link_7_to_gripper_transform,
             theta_bound=0.05,
         )
-        ik_prog.SetInitialGuess(q_variables, q_nominal)
+        ik_prog.SetInitialGuess(q_variables, self.q_nominal)
         start = time.time()
         ik_result = Solve(ik_prog)
         print(f"ik time: {time.time()-start}")
@@ -176,117 +179,62 @@ class MotionPlanner(LeafSystem):
             print(ik_result.GetInfeasibleConstraintNames(ik_prog))
         else:
             print("post-catch ik_result solve succeeded.")
-        
+
         q_end = ik_result.GetSolution(q_variables)  # (7,) np array
-        q_guess = np.linspace(q0, q_end, 6).T  # (7,6) np array
 
-        link_7_to_gripper_transform = RotationMatrix.MakeZRotation(np.pi / 2) @ RotationMatrix.MakeXRotation(np.pi / 2)
+        return q_end
 
-        trajopt = KinematicTrajectoryOptimization(num_q, 6)  # 6 control points in Bspline
-        prog = trajopt.get_mutable_prog()
-        self.setSolverSettings(prog)
 
-        # Pick iiwa's catch position (in 7D) as initial guess for control points
-        path_guess = BsplineTrajectory(trajopt.basis(), q_guess)
-        trajopt.SetInitialGuess(path_guess)
+        # complete_post_catch_traj = []
 
-        trajopt.AddPathLengthCost(10.0)
+        # # Simple constant velocity trajectory in the direction of the object's velocity at catch time
+        # NUM_WAYPOINTS = 10  # Number of waypoints for the trajectory
+        # q_prev = iiwa_catch_pos.reshape((7,))  # (7,) np array
+        # times = np.linspace(catch_time, catch_time+traj_duration, NUM_WAYPOINTS)
+        # waypoints = np.linspace(X_WCatch.translation(), X_WEnd.translation(), NUM_WAYPOINTS)
+        # for i, waypoint in enumerate(waypoints[1:], start=1):
+        #     waypoint_pose = RigidTransform(X_WCatch.rotation(), waypoint)
 
-        trajopt.AddPositionBounds(
-            plant.GetPositionLowerLimits(), plant.GetPositionUpperLimits()
-        )
-        trajopt.AddVelocityBounds(
-            plant.GetVelocityLowerLimits(), plant.GetVelocityUpperLimits()
-        )
+        #     # Use IK to turn this into joint coords
+        #     ik = inverse_kinematics.InverseKinematics(plant)
+        #     q_variables = ik.q()  # Get variables for MathematicalProgram
+        #     ik_prog = ik.prog()
+        #     ik_prog.AddQuadraticErrorCost(np.identity(len(q_variables)), self.q_nominal, q_variables)
+        #     ik.AddPositionConstraint(
+        #         frameA=world_frame,
+        #         frameB=gripper_frame,
+        #         p_BQ=[0, 0, 0.1],
+        #         p_AQ_lower=waypoint_pose.translation(),
+        #         p_AQ_upper=waypoint_pose.translation(),
+        #     )
+        #     ik.AddOrientationConstraint(
+        #         frameAbar=world_frame,
+        #         R_AbarA=waypoint_pose.rotation(),
+        #         frameBbar=gripper_frame,
+        #         R_BbarB=RotationMatrix(),
+        #         theta_bound=0.05,
+        #     )
+        #     ik_prog.SetInitialGuess(q_variables, self.q_nominal)
+        #     start = time.time()
+        #     ik_result = Solve(ik_prog)
+        #     print(f"ik time: {time.time()-start}")
+        #     if not ik_result.is_success():
+        #         print("ERROR: post-catch ik_result solve failed: " + str(ik_result.get_solver_id().name()))
+        #         print(ik_result.GetInfeasibleConstraintNames(ik_prog))
+        #     else:
+        #         print("post-catch ik_result solve succeeded.")
+            
+        #     q_waypoint = ik_result.GetSolution(q_variables)  # (7,) np array
+            
+        #     post_catch_traj = PiecewisePolynomial.FirstOrderHold([times[i-1], times[i]], np.column_stack([q_prev, q_waypoint]))
 
-        trajopt.AddDurationConstraint(0, 1)
+        #     q_prev = q_waypoint
 
-        # start constraint
-        start_constraint = PositionConstraint(
-            plant,
-            world_frame,
-            X_WCatch.translation() - 0.01,  # lower limit
-            X_WCatch.translation() + 0.01,  # upper limit
-            gripper_frame,
-            [0, 0, 0.1],
-            plant_context,
-        )
-        start_orientation_constraint = OrientationConstraint(
-            plant,
-            world_frame,
-            X_WCatch.rotation(),  # orientation of gripper in world frame ...
-            gripper_frame,
-            link_7_to_gripper_transform,  # ... must equal origin in gripper frame
-            0.1,  # theta bound
-            plant_context
-        )
-        start_vel_constraint = SpatialVelocityConstraint(
-            plant_autodiff,
-            plant_autodiff.world_frame(),
-            catch_vel - 1.0,  # lower limit
-            catch_vel + 1.0,  # upper limit
-            plant_autodiff.GetFrameByName("iiwa_link_7"),
-            np.array([0, 0, 0.1]).reshape(-1,1),
-            plant_autodiff.CreateDefaultContext(),
-        )
-        trajopt.AddPathPositionConstraint(start_constraint, 0)
-        trajopt.AddPathPositionConstraint(start_orientation_constraint, 0)
-        # trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
-        prog.AddQuadraticErrorCost(
-            np.eye(num_q), q0, trajopt.control_points()[:, 0]
-        )
+        #     complete_post_catch_traj.append(post_catch_traj)
 
-        # goal constraint
-        goal_pos_constraint = PositionConstraint(
-            plant,
-            world_frame,
-            X_WEnd.translation() - 0.01,  # lower limit
-            X_WEnd.translation() + 0.01,  # upper limit
-            gripper_frame,
-            [0, 0, 0.1],
-            plant_context,
-        )
-        goal_orientation_constraint = OrientationConstraint(
-            plant,
-            world_frame,
-            X_WEnd.rotation(),  # orientation of gripper in world frame ...
-            gripper_frame,
-            link_7_to_gripper_transform,  # ... must equal origin in gripper frame
-            0.1,  # theta bound
-            plant_context
-        )
-        trajopt.AddPathPositionConstraint(goal_pos_constraint, 1)
-        trajopt.AddPathPositionConstraint(goal_orientation_constraint, 1)
-        prog.AddQuadraticErrorCost(
-            np.eye(num_q), q0, trajopt.control_points()[:, -1]
-        )
+        # complete_post_catch_traj = CompositeTrajectory(complete_post_catch_traj)
 
-        # # End with zero velocity
-        # trajopt.AddPathVelocityConstraint(
-        #     np.zeros((num_q, 1)), np.zeros((num_q, 1)), 1
-        # )
-
-        # Solve for trajectory
-        solver = SnoptSolver()
-        result = solver.Solve(prog)
-        if not result.is_success():
-            print("ERROR: post-catch traj opt solve failed: " + str(result.get_solver_id().name()))
-            print(result.GetInfeasibleConstraintNames(prog))
-        else:
-            print("Post-catch traj opt solve succeeded.")
-        traj = trajopt.ReconstructTrajectory(result)  # BSplineTrajectory
-
-        # Time shift the trajectory
-        time_scaling_traj = PiecewisePolynomial.FirstOrderHold(
-            [catch_time, catch_time+traj_duration],  # Assuming two segments: initial and final times
-            np.array([[0, traj_duration]])  # Shifts start and end times by time_shift
-        )
-        time_shifted_traj = PathParameterizedTrajectory(
-            traj, time_scaling_traj
-        )
-
-        return time_shifted_traj
-
+        # return complete_post_catch_traj
 
 
     def add_constraints(self, 
@@ -482,7 +430,6 @@ class MotionPlanner(LeafSystem):
         print(f"obj_vel_at_catch: {obj_vel_at_catch}")
 
         num_q = plant.num_positions()  # =7 (all of iiwa's joints)
-        q_nominal = np.array([0.0, 0.6, 0.0, -1.75, 0.0, 1.0, 0.0])  # nominal joint for joint-centering
 
         # If this is the very first traj opt (so we don't yet have a very good initial guess), do an interative optimization
         MAX_ITERATIONS = 12
@@ -505,7 +452,7 @@ class MotionPlanner(LeafSystem):
                     ik = inverse_kinematics.InverseKinematics(plant)
                     q_variables = ik.q()  # Get variables for MathematicalProgram
                     ik_prog = ik.prog()
-                    ik_prog.AddQuadraticErrorCost(np.identity(len(q_variables)), q_nominal, q_variables)
+                    ik_prog.AddQuadraticErrorCost(np.identity(len(q_variables)), self.q_nominal, q_variables)
                     ik.AddPositionConstraint(
                         frameA=world_frame,
                         frameB=gripper_frame,
@@ -520,7 +467,7 @@ class MotionPlanner(LeafSystem):
                         R_BbarB=RotationMatrix(),
                         theta_bound=0.05,
                     )
-                    ik_prog.SetInitialGuess(q_variables, q_nominal)
+                    ik_prog.SetInitialGuess(q_variables, self.q_nominal)
                     ik_result = Solve(ik_prog)
                     if not ik_result.is_success():
                         print("ERROR: ik_result solve failed: " + str(ik_result.get_solver_id().name()))
@@ -583,7 +530,7 @@ class MotionPlanner(LeafSystem):
                 num_iter += 1
 
                 # Also set the WSG trajectory once (this doesn't need to be updated in future cycles)
-                close_time = 0.1
+                close_time = 0.05
                 wsg_open_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
                     [0, obj_catch_t],
                     np.array([[1, 1]])
@@ -596,6 +543,8 @@ class MotionPlanner(LeafSystem):
                 wsg_complete_traj = CompositeTrajectory([wsg_open_traj, wsg_close_traj])
 
                 state.get_mutable_abstract_state(int(self._traj_wsg_index)).set_value(wsg_complete_traj)
+
+                # Also set post-catch end position once (this doesn't ned to be updated in future cycles either)
         
         # If this is not the first cycle (so we have a good initial guess already), then just go straight to an optimization w/strict constraints
         else:
@@ -652,32 +601,35 @@ class MotionPlanner(LeafSystem):
         # print(f"time_shifted_final_traj.start_time(): {time_shifted_final_traj.start_time()}")
         # print(f"time_shifted_final_traj.end_time(): {time_shifted_final_traj.end_time()}")
 
-        # self.VisualizePath(time_shifted_final_traj, "final traj")
+        self.VisualizePath(time_shifted_final_traj, "final traj")
 
-        # state.get_mutable_abstract_state(int(self._traj_index)).set_value(time_shifted_final_traj)
+        state.get_mutable_abstract_state(int(self._traj_index)).set_value(time_shifted_final_traj)
 
         self.previous_compute_result = final_traj  # save the solved trajectory to use as initial guess next iteration
         
+        self.obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)
 
-        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)
-        post_catch_traj = self.build_post_catch_trajectory(plant, 
-                                                           plant_context,
-                                                           plant_autodiff,
-                                                           world_frame, 
-                                                           gripper_frame, 
-                                                           q_nominal,
-                                                           X_WGoal, 
-                                                           obj_vel_at_catch, 
-                                                           time_shifted_final_traj.value(time_shifted_final_traj.end_time()), 
-                                                           time_shifted_final_traj.end_time())
+        self.q_end = self.build_post_catch_trajectory(plant, 
+                                                world_frame, 
+                                                gripper_frame, 
+                                                X_WGoal, 
+                                                obj_vel_at_catch, 
+                                                time_shifted_final_traj.value(time_shifted_final_traj.end_time()), 
+                                                time_shifted_final_traj.end_time())
 
-        complete_traj = CompositeTrajectory([time_shifted_final_traj, post_catch_traj])
+        # post_catch_traj = self.build_post_catch_trajectory(plant, 
+        #                                                    world_frame, 
+        #                                                    gripper_frame, 
+        #                                                    X_WGoal, 
+        #                                                    obj_vel_at_catch, 
+        #                                                    time_shifted_final_traj.value(time_shifted_final_traj.end_time()), 
+        #                                                    time_shifted_final_traj.end_time())
 
-        print(f"complete_traj.end_time(): {complete_traj.end_time()}")
+        # complete_traj = CompositeTrajectory([time_shifted_final_traj, post_catch_traj])
 
-        self.VisualizePath(complete_traj, "complete traj")
+        # self.VisualizePath(complete_traj, "complete traj")
 
-        state.get_mutable_abstract_state(int(self._traj_index)).set_value(complete_traj)
+        # state.get_mutable_abstract_state(int(self._traj_index)).set_value(complete_traj)
 
 
     def output_traj(self, context, output):
@@ -694,11 +646,30 @@ class MotionPlanner(LeafSystem):
             ))
 
         else:
-            # print("planner outputting iiwa position: " + str(traj_q.value(context.get_time())))
+            # if context.get_time() <= traj_q.end_time():
+            #     # print("planner outputting iiwa position: " + str(traj_q.value(context.get_time())))
+            #     output.SetFromVector(np.append(
+            #         traj_q.value(context.get_time()),
+            #         traj_q.EvalDerivative(context.get_time())
+            #     ))
+            # else:  # return the ik result computed at end position
+            #     if self.q_end is not None:
+            #         output.SetFromVector(np.append(self.q_end, np.zeros(7)))
+
             output.SetFromVector(np.append(
                 traj_q.value(context.get_time()),
                 traj_q.EvalDerivative(context.get_time())
             ))
+            
+
+    def output_acceleration(self, context, output):
+        traj_q = context.get_mutable_abstract_state(int(self._traj_index)).get_value()
+
+        if (traj_q.rows() == 1):
+            # print("planner outputting default 0 acceleration")
+            output.SetFromVector(np.zeros((7,)))
+        else:
+            output.SetFromVector(traj_q.EvalDerivative(context.get_time(), 2))
 
 
     def output_wsg_traj(self, context, output):

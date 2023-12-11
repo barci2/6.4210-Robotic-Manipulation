@@ -288,7 +288,7 @@ class GraspSelector(LeafSystem):
         return final_cost, distance_obj_pc_centroid_to_X_OG_y_axis, direction, alignment
 
 
-    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=400, random_seed=7):
+    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=500, random_seed=1):
         """
         Args:
             - obj_pc (PointCloud object): pointcloud of the object.
@@ -320,13 +320,18 @@ class GraspSelector(LeafSystem):
 
             new_X_OG = X_OF @ RigidTransform(np.array([0, -0.05, 0]))  # Move gripper back by fixed amount
 
+            # grasp_CoM_cost_threshold = 0.020  # range: 0 - 0.05
+            # direction_cost_threshold = 0.050  # range: 0 - 2
+            # collision_cost_threshold = 0.025  # range: 0 - 2
             grasp_CoM_cost_threshold = 0.020  # range: 0 - 0.05
-            direction_cost_threshold = 0.050  # range: 0 - 2
-            collision_cost_threshold = 0.025  # range: 0 - 2
+            direction_cost_threshold = 0.500  # range: 0 - 2
+            collision_cost_threshold = 0.030  # range: 0 - 2
             new_X_OG_cost, grasp_CoM_cost, direction_cost, collision_cost = self.compute_grasp_cost(obj_pc_centroid, new_X_OG, obj_catch_t)
             # if grasp isn't above thresholds, don't even bother checking for collision
             if grasp_CoM_cost > grasp_CoM_cost_threshold or direction_cost > direction_cost_threshold or collision_cost > collision_cost_threshold:
                 return
+            
+            print("passed thresholds")
 
             # check_collision takes most of the runtime
             if (self.check_collision(obj_pc, new_X_OG) is not True) and self.check_nonempty(obj_pc, new_X_OG):  # no collision, and there is an object between fingers
@@ -396,8 +401,8 @@ class GraspSelector(LeafSystem):
                 if obj_dist_from_iiwa_squared > 0.42**2 and obj_dist_from_iiwa_squared < 0.75**2:
                     self.obj_reachable_end_t = t
             
-            # For now, all grasps will happen in the middle of when obj is in iiwa's work envelope
-            obj_catch_t = 0.5*(self.obj_reachable_start_t + self.obj_reachable_end_t)
+            # For now, all grasps will happen at 0.475 of when obj is in iiwa's work envelope
+            obj_catch_t = 0.475*(self.obj_reachable_start_t + self.obj_reachable_end_t)
 
             start = time.time()
             grasp_candidates = self.compute_candidate_grasps(self.obj_pc, obj_pc_centroid, obj_catch_t)
