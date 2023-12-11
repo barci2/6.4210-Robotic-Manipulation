@@ -253,7 +253,7 @@ class MotionPlanner(LeafSystem):
                         acceptable_dur_err=0.01,
                         acceptable_pos_err=0.02,
                         theta_bound = 0.4,
-                        acceptable_vel_err=1.5):
+                        acceptable_vel_err=0.1):
         
         trajopt.AddPathLengthCost(1.0)
 
@@ -327,7 +327,7 @@ class MotionPlanner(LeafSystem):
 
         # end with velocity equal to object's velocity at that moment
         # DIVISION BY 3 IS TEMPORARY; HAVING SUCH HIGH ENDING VELOCITY MAKES IT VERY HARD FOR SNOPT TO SOLVE
-        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)*0.5  # (3,1) np array
+        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)*0.25  # (3,1) np array
         final_vel_constraint = SpatialVelocityConstraint(
             plant_autodiff,
             plant_autodiff.world_frame(),

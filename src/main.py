@@ -144,7 +144,7 @@ builder.Connect(motion_planner.GetOutputPort("wsg_command"), station.GetInputPor
 # Implement inverse dynamics controller for feedforward acceleration
 controller_plant = MultibodyPlant(time_step=0.001)
 controller_iiwa = AddIiwa(controller_plant)
-controller_iiwa = Parser(controller_plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
+# controller_iiwa = Parser(controller_plant).AddModelsFromUrl("package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf")[0]  # ModelInstance object
 controller_plant.Finalize()
 num_iiwa_positions = controller_plant.num_positions()
 controller = builder.AddSystem(InverseDynamicsController(controller_plant, [100]*num_iiwa_positions, [1]*num_iiwa_positions, [20]*num_iiwa_positions, True))
