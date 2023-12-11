@@ -1,3 +1,8 @@
+"""
+This is station.py directly from drake. It's version 2023.12.10, which is not
+officially released at time of writing, so we just imported it manually here.
+"""
+
 import dataclasses as dc
 from functools import partial
 import os
