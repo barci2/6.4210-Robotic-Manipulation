@@ -35,7 +35,7 @@ scenario_file = "data/scenario.yaml"
 thrown_obj_prefix = "obj"
 this_drake_module_name = "cwd"
 point_cloud_cameras_center = [0, 0, 100]
-simulator_runtime = 1.5
+simulator_runtime = 1.25
 
 np.random.seed(seed)
 
@@ -184,7 +184,7 @@ obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableCont
 # throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 6))
 # For banana:
 throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(-np.pi / 3))
-
+# For tennis ball, use either (it's a ball)
 
 # Example camera view
 # plt.imshow(icp_cameras[17].depth_image_32F_output_port().Eval(icp_cameras[17].GetMyContextFromRoot(simulator_context)).data[::-1])
