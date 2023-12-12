@@ -29,7 +29,7 @@ from grasping_selection import GraspSelector
 from motion_planner import MotionPlanner
 
 ##### Settings #####
-seed = 135
+seed = 130
 close_button_str = "Close"
 scenario_file = "data/scenario.yaml"
 thrown_obj_prefix = "obj"
@@ -113,11 +113,11 @@ traj_pred_system = builder.AddSystem(TrajectoryPredictor(
     cameras=icp_cameras,
     camera_transforms=icp_camera_transforms,
     pred_thresh=5,
-    pred_samples_thresh=3,  # how many views of object are needed before outputting predicted traj
+    pred_samples_thresh=4,  # how many views of object are needed before outputting predicted traj
     thrown_model_name=obj_name,
     ransac_iters=20,
     ransac_thresh=0.01,
-    ransac_rot_thresh=0.1,
+    # ransac_rot_thresh=0.1,
     ransac_window=30,
     plant=plant,
     meshcat=meshcat

@@ -307,7 +307,7 @@ class GraspSelector(LeafSystem):
         def compute_candidate(idx, obj_pc, kdtree, ball_radius, candidate_lst_lock, candidate_lst):
             X_OF = self.compute_darboux_frame(idx, obj_pc, kdtree, ball_radius)  # find Darboux frame of random point
 
-            new_X_OG = X_OF @ RigidTransform(np.array([0, -0.05, 0]))  # Move gripper back by fixed amount
+            new_X_OG = X_OF @ RigidTransform(np.array([0, -0.06, 0]))  # Move gripper back by fixed amount
 
             grasp_CoM_cost_threshold = 0.040  # range: 0 - 0.05
             direction_cost_threshold = 0.750  # range: 0 - 2

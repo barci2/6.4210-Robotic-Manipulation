@@ -344,12 +344,24 @@ class MotionPlanner(LeafSystem):
             plant_autodiff.CreateDefaultContext(),
         )
 
-        # # Ensure iiwa never goes backwards during trajectory
-        # for t in np.linspace(0, 1, 20):
-        #     # just unsure base of iiwa (the "turret") is always rotating in the right direction
-        #     trajopt.AddPathVelocityConstraint(np.append(-0.1, np.full((6,), -np.inf)),  # lower limit
-        #                                       np.append(np.inf, np.full((6,), np.inf)),  # upper limit
-        #                                       t)
+        # Ensure iiwa never goes backwards during trajectory
+        # use cross product to figure if iiwa should go cw/ccw about world z-axis
+        desired_direction = np.cross(np.array([0, 0, 1]), 
+                                        np.append(obj_vel_at_catch[:2].reshape((2,)), 0)
+                                        )[2]
+        # set constraints on a number of points in trajectory
+        for t in np.linspace(0, 1, 20):
+            # Just check iiwa's joint 1/"turret" direction 
+            if desired_direction > 0:  # iiwa should go ccw
+                # joint 1 must have pos velocity
+                trajopt.AddPathVelocityConstraint(np.append(0.1, np.full((6,), -np.inf)),  # lower limit
+                                                np.append(np.inf, np.full((6,), np.inf)),  # upper limit
+                                                t)
+            else:  # iiwa should go cw
+                # joint 1 must hvae neg velocity
+                trajopt.AddPathVelocityConstraint(np.append(-np.inf, np.full((6,), -np.inf)),  # lower limit
+                                                np.append(-0.1, np.full((6,), np.inf)),  # upper limit
+                                                t)
 
         # collision constraints
         # collision_constraint = MinimumDistanceLowerBoundConstraint(
