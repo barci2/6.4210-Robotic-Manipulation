@@ -264,7 +264,7 @@ class MotionPlanner(LeafSystem):
             plant.GetVelocityLowerLimits(), plant.GetVelocityUpperLimits()
         )
 
-        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)
+        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]
         # if object is up to 0.1m radius, make gripper arrive at catching pose that distance early
         gripper_early_time = 0.1 / np.linalg.norm(obj_vel_at_catch)
         duration_target -= gripper_early_time
@@ -438,7 +438,7 @@ class MotionPlanner(LeafSystem):
         AddMeshcatTriad(self.meshcat, "goal", X_PT=X_WGoal, opacity=0.5)
         self.meshcat.SetTransform("goal", X_WGoal)
 
-        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)  # (3,1) np array
+        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,1) np array
         print(f"current_gripper_vel: {current_gripper_vel}")
         print(f"obj_vel_at_catch: {obj_vel_at_catch}")
 
@@ -621,7 +621,7 @@ class MotionPlanner(LeafSystem):
 
         self.previous_compute_result = final_traj  # save the solved trajectory to use as initial guess next iteration
         
-        self.obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)
+        self.obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]
 
         # self.q_end = self.build_post_catch_trajectory(plant, 
         #                                         world_frame, 

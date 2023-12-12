@@ -254,7 +254,7 @@ class GraspSelector(LeafSystem):
         distance_obj_pc_centroid_to_X_OG_y_axis = np.linalg.norm(obj_pc_centroid_relative_to_X_OG - projection_obj_pc_centroid_relative_to_X_OG_onto_X_OG_y_axis_vector)
 
         # Transform the grasp pose from object frame to world frame
-        X_WO = self.obj_traj.value(t)
+        X_WO = self.obj_pose_at_catch
         X_WG = X_WO @ X_OG
 
         # Add cost associated with whether X_WG's y-axis points away from iiwa (which is what we want)
@@ -269,7 +269,7 @@ class GraspSelector(LeafSystem):
         obj_vel_at_catch = self.obj_traj.EvalDerivative(t)[:3]  # (3,) np array
         obj_direction_at_catch = obj_vel_at_catch / np.linalg.norm(obj_vel_at_catch)  # normalize
         X_WG_z_axis_vector = (X_WG.rotation().matrix() @ np.array([[0],[0],[1]])).reshape((3,))
-        # on the order of 0 - 1
+        # on the order of 0 - 2
         alignment = 1 - np.absolute(np.dot(obj_direction_at_catch, X_WG_z_axis_vector))  # absolute since it's ok for gripper z-axis to be perfectly against obj velocity
 
         # if (alignment < 0.010 and direction < 0.040):
@@ -286,7 +286,7 @@ class GraspSelector(LeafSystem):
         return final_cost, distance_obj_pc_centroid_to_X_OG_y_axis, direction, alignment
 
 
-    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=1000, random_seed=1):
+    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=500, random_seed=1):
         """
         Args:
             - obj_pc (PointCloud object): pointcloud of the object.
@@ -318,7 +318,6 @@ class GraspSelector(LeafSystem):
                 return
 
             print("passed grasping thresholds")
-            print(new_X_OG_cost)
 
             # check_collision takes most of the runtime
             if (self.check_collision(obj_pc, new_X_OG) is not True) and self.check_nonempty(obj_pc, new_X_OG):  # no collision, and there is an object between fingers
@@ -387,6 +386,8 @@ class GraspSelector(LeafSystem):
             # For now, all grasps will happen at 0.475 of when obj is in iiwa's work envelope
             obj_catch_t = 0.475*(self.obj_reachable_start_t + self.obj_reachable_end_t)
 
+            self.obj_pose_at_catch = self.obj_traj.value(obj_catch_t)
+
             start = time.time()
             grasp_candidates = self.compute_candidate_grasps(self.obj_pc, obj_pc_centroid, obj_catch_t)
             print(f"-----------grasp sampling runtime: {time.time() - start}")
@@ -413,7 +414,7 @@ class GraspSelector(LeafSystem):
                     self.draw_grasp_candidate(grasp, prefix="gripper " + str(time.time()))
 
             # Convert min_cost_grasp to world frame
-            min_cost_grasp_W = self.obj_traj.value(obj_catch_t) @ min_cost_grasp
+            min_cost_grasp_W = self.obj_pose_at_catch @ min_cost_grasp
 
             # draw best grasp gripper position in world
             # if (self.visualize):
@@ -428,6 +429,9 @@ class GraspSelector(LeafSystem):
         else:
             self.obj_traj = self.get_input_port(1).Eval(context)
 
+            # Allow the estimated catch pose to vary in translation, not rotation, since rotation has so much noise that traj opt will fail
+            estimated_obj_catch_pose = RigidTransform(self.obj_pose_at_catch.rotation(), self.obj_traj.value(self.obj_catch_t).translation())
+
             # Shift selected grasp slightly if object's predicted location at catch time has changed
-            selected_grasp_world_frame = self.obj_traj.value(self.obj_catch_t) @ self.selected_grasp_obj_frame
+            selected_grasp_world_frame = estimated_obj_catch_pose @ self.selected_grasp_obj_frame
             output.set_value({selected_grasp_world_frame: self.obj_catch_t})
