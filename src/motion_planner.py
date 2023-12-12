@@ -264,6 +264,12 @@ class MotionPlanner(LeafSystem):
             plant.GetVelocityLowerLimits(), plant.GetVelocityUpperLimits()
         )
 
+        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)
+        # if object is up to 0.1m radius, make gripper arrive at catching pose that distance early
+        gripper_early_time = 0.1 / np.linalg.norm(obj_vel_at_catch)
+        duration_target -= gripper_early_time
+        print(f"gripper_early_time: {gripper_early_time}")
+        
         print(f"duration_target: {duration_target}")
         trajopt.AddDurationConstraint(duration_target-acceptable_dur_err, duration_target+acceptable_dur_err)
 
@@ -327,16 +333,23 @@ class MotionPlanner(LeafSystem):
 
         # end with velocity equal to object's velocity at that moment
         # DIVISION BY 3 IS TEMPORARY; HAVING SUCH HIGH ENDING VELOCITY MAKES IT VERY HARD FOR SNOPT TO SOLVE
-        obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)*0.3  # (3,1) np array
+        catch_vel = obj_vel_at_catch*0.3  # (3,1) np array
         final_vel_constraint = SpatialVelocityConstraint(
             plant_autodiff,
             plant_autodiff.world_frame(),
-            obj_vel_at_catch - acceptable_vel_err,  # upper limit
-            obj_vel_at_catch + acceptable_vel_err,  # lower limit
+            catch_vel - acceptable_vel_err,  # upper limit
+            catch_vel + acceptable_vel_err,  # lower limit
             plant_autodiff.GetFrameByName("iiwa_link_7"),
             np.array([0, 0, 0.1]).reshape(-1,1),
             plant_autodiff.CreateDefaultContext(),
         )
+
+        # # Ensure iiwa never goes backwards during trajectory
+        # for t in np.linspace(0, 1, 20):
+        #     # just unsure base of iiwa (the "turret") is always rotating in the right direction
+        #     trajopt.AddPathVelocityConstraint(np.append(-0.1, np.full((6,), -np.inf)),  # lower limit
+        #                                       np.append(np.inf, np.full((6,), np.inf)),  # upper limit
+        #                                       t)
 
         # collision constraints
         # collision_constraint = MinimumDistanceLowerBoundConstraint(

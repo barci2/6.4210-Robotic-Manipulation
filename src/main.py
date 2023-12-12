@@ -181,9 +181,9 @@ plant.SetFreeBodyPose(plant_context, body, RigidTransform(point_cloud_cameras_ce
 obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableContextFromRoot(simulator_context))
 
 # For mustard bottle:
-# throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 6))
+throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 6))
 # For banana:
-throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(-np.pi / 3))
+# throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(-np.pi / 3))
 # For tennis ball, use either (it's a ball)
 
 # Example camera view

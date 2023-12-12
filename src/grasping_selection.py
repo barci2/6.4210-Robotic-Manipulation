@@ -313,7 +313,7 @@ class GraspSelector(LeafSystem):
             direction_cost_threshold = 0.750  # range: 0 - 2
             collision_cost_threshold = 0.250  # range: 0 - 2
             new_X_OG_cost, grasp_CoM_cost, direction_cost, collision_cost = self.compute_grasp_cost(obj_pc_centroid, new_X_OG, obj_catch_t)
-            # if grasp isn't above thresholds, don't even bother checking for collision
+            # if grasp isn't above thresholds, don't even bother checking for collision (which is slow)
             if grasp_CoM_cost > grasp_CoM_cost_threshold or direction_cost > direction_cost_threshold or collision_cost > collision_cost_threshold:
                 return
             
@@ -397,10 +397,7 @@ class GraspSelector(LeafSystem):
                 self.meshcat.SetObject("cloud", obj_pc_for_visualization)
 
             """
-            Iterate through all grasps and select the best based on the following heuristic:
-            Minimum distance between the centroid of the object and the y-axis ray of X_WG.
-
-            This ensures the gripper doesn't try to grab an edge of the object.
+            Iterate through all grasps and select the best based on the heuristics in compute_grasp_cost
             """
             min_cost = float('inf')
             min_cost_grasp = None  # RigidTransform, in object frame
