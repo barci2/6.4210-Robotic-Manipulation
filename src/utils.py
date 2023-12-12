@@ -2,14 +2,13 @@
 from enum import Enum
 from typing import BinaryIO, Optional, Union, Tuple
 from pydrake.all import (
-    DiagramBuilder,
     Diagram,
     RigidTransform,
     RotationMatrix,
     SpatialVelocity,
     MultibodyPlant,
     Context,
-    CameraConfig
+    AngleAxis,
 )
 from dataclasses import dataclass, field
 from pydrake.common.yaml import yaml_load_typed
@@ -115,6 +114,14 @@ class ObjectTrajectory:
     x: Tuple[np.float32, np.float32, np.float32] = (0, 0, 0)
     y: Tuple[np.float32, np.float32, np.float32] = (0, 0, 0)
     z: Tuple[np.float32, np.float32, np.float32] = (0, 0, 0)
+    r: Tuple[AngleAxis, RotationMatrix] = field(default_factory=lambda: (AngleAxis(), RotationMatrix()))
+
+    def __eq__(self, other):
+        return np.allclose(
+            [*self.x, *self.y, *self.z, self.r[0].angle(), *self.r[0].axis(), *self.r[1].matrix().flatten()],
+            [*other.x, *other.y, *other.z, other.r[0].angle(), *other.r[0].axis(), *other.r[1].matrix().flatten()]
+        )
+
 
     @staticmethod
     def _solve_single_traj(
@@ -127,6 +134,19 @@ class ObjectTrajectory:
         return (a, *np.linalg.solve([[t1, 1], [t2, 1]], [x1 - a * t1 ** 2, x2 - a * t2 ** 2]))
 
     @staticmethod
+    def _solve_rotation(
+        r1_WO: RotationMatrix,
+        t1: np.float32,
+        r2_WO: RotationMatrix,
+        t2: np.float32
+    ) -> Tuple[AngleAxis, RotationMatrix]:
+        w = (r1_WO.inverse() @ r2_WO).ToAngleAxis()
+        rate = w.angle() / (t2 - t1)
+        w.set_angle(rate)
+        r0 = r1_WO @ RotationMatrix(AngleAxis(-rate * t1, w.axis()))
+        return (w, r0)
+
+    @staticmethod
     def CalculateTrajectory(
             X1: RigidTransform,
             t1: np.float32,
@@ -136,22 +156,26 @@ class ObjectTrajectory:
         ) -> "ObjectTrajectory":
         p1 = X1.translation()
         p2 = X2.translation()
+        r1_O = X1.rotation()
+        r2_O = X2.rotation()
         return ObjectTrajectory(
             ObjectTrajectory._solve_single_traj(0, p1[0], t1, p2[0], t2),
             ObjectTrajectory._solve_single_traj(0, p1[1], t1, p2[1], t2),
-            ObjectTrajectory._solve_single_traj(-g/2, p1[2], t1, p2[2], t2)
+            ObjectTrajectory._solve_single_traj(-g/2, p1[2], t1, p2[2], t2),
+            ObjectTrajectory._solve_rotation(r1_O, t1, r2_O, t2)
         )
 
     def value(self, t: np.float32) -> RigidTransform:
-        return RigidTransform([
+        r = RotationMatrix(self.r[1] @ RotationMatrix(AngleAxis(self.r[0].angle() * t, self.r[0].axis())))
+        return RigidTransform(r, [
             self.x[0] * t ** 2 + self.x[1] * t + self.x[2],
             self.y[0] * t ** 2 + self.y[1] * t + self.y[2],
             self.z[0] * t ** 2 + self.z[1] * t + self.z[2],
         ])
-    
+
     def EvalDerivative(self, t: np.float32) -> npt.NDArray[np.float32]:
         return np.array([
             2 * self.x[0] * t + self.x[1],
             2 * self.y[0] * t + self.y[1],
             2 * self.z[0] * t + self.z[1]
-        ])
+        ] + list(self.r[0].axis() * self.r[0].angle()))

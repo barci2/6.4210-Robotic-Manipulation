@@ -231,6 +231,7 @@ class TrajectoryPredictor(CameraBackedSystem):
             pred_samples_thresh: int,
             ransac_iters: int,
             ransac_thresh: np.float32,
+            ransac_rot_thresh: np.float32,
             ransac_window: int,
             thrown_model_name: str,
             plant: MultibodyPlant,
@@ -249,6 +250,7 @@ class TrajectoryPredictor(CameraBackedSystem):
         self._pred_samples_thresh = pred_samples_thresh
         self._ransac_iters = ransac_iters
         self._ransac_thresh = ransac_thresh
+        self._ransac_rot_thresh = ransac_rot_thresh
         self._ransac_window = ransac_window
         # AddMeshcatTriad(self._meshcat, "obj_transform")
 
@@ -271,11 +273,6 @@ class TrajectoryPredictor(CameraBackedSystem):
             self.OutputTrajectory,
         )
 
-    def _maybe_init_point_cloud(self, context: Context):
-        if self._point_kd_tree is None:
-            points = self._obj_point_cloud_input.Eval(context).xyzs()
-            self._point_kd_tree = KDTree(points.T)
-
     @property
     def point_cloud_input_port(self) -> OutputPort:
         return self._obj_point_cloud_input
@@ -287,7 +284,7 @@ class TrajectoryPredictor(CameraBackedSystem):
         if scene_points.shape[1] == 0:
             return
 
-        X = self._calculate_icp(context, scene_points.T)
+        X = self._calculate_icp(context, scene_points.T, self._get_previous_pose(context))
         self._update_ransac(context, X)
 
         # Visualize spheres for the data points that are used for prediction
@@ -297,11 +294,24 @@ class TrajectoryPredictor(CameraBackedSystem):
         self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.005), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
         self._meshcat.SetTransform(f"PredTrajSpheres/{pred_traj_calls}", X)
 
+    def _maybe_init_point_cloud(self, context: Context):
+        if self._point_kd_tree is None:
+            points = self._obj_point_cloud_input.Eval(context).xyzs()
+            self._point_kd_tree = KDTree(points.T)
 
-    def _calculate_icp(self, context: Context, p_s: npt.NDArray[np.float32]) -> RigidTransform:
+    def _get_previous_pose(self, context: Context) -> RigidTransform():
+        poses = context.get_abstract_state(self._poses_state).get_value()
+        if not poses:
+            return RigidTransform()
+        pose, _ = poses[0]
+        return pose
+
+    def _calculate_icp(self, context: Context, p_s: npt.NDArray[np.float32], X_init: RigidTransform = RigidTransform()) -> RigidTransform:
         self._maybe_init_point_cloud(context)
 
-        X = RigidTransform()
+        p_s = (X_init @ p_s.T).T
+        X = X_init
+
         prev_cost = np.inf
         while True:
             d, i = self._point_kd_tree.query(p_s)
@@ -334,12 +344,6 @@ class TrajectoryPredictor(CameraBackedSystem):
         if len(poses) > self._ransac_window:
             poses.pop()
 
-        # context.SetAbstractState(self._poses_state, poses)
-        # if len(poses) == 1:
-        #     context.SetAbstractState(self._traj_state, ObjectTrajectory.CalculateTrajectory(
-        #         X, 0, X, context.get_time()
-        #     ))
-        #     return
         if len(poses) < max(self._pred_samples_thresh, 2):
             return
 
@@ -349,13 +353,18 @@ class TrajectoryPredictor(CameraBackedSystem):
         for _ in range(self._ransac_iters):
             i, j = np.random.choice(len(poses), size=2, replace=False)
             traj_guess = ObjectTrajectory.CalculateTrajectory(*poses[i], *poses[j])
+            pose_pairs = list((pose, traj_guess.value(t)) for pose, t in poses)
 
             dists = np.array([np.linalg.norm(
-                        traj_guess.value(t).translation() - pose.translation()
-                     ) for pose, t in poses])
-            matches = dists < self._ransac_thresh
+                        pose.translation() - pose_guess.translation()
+                     ) for pose, pose_guess in pose_pairs])
+            rots = np.array([np.abs(RotationMatrix(
+                        pose.rotation().inverse() @ pose_guess.rotation()
+                    ).ToAngleAxis().angle()) for pose, pose_guess in pose_pairs])
+
+            matches = np.logical_and(dists < self._ransac_thresh, rots < self._ransac_rot_thresh)
             match_count = matches.sum()
-            match_cost = dists[matches].sum()
+            match_cost = dists[matches].sum() + rots[matches].sum()
 
             if match_count > best_match_count or (match_count == best_match_count and match_cost < best_match_cost):
                 best_traj = traj_guess
