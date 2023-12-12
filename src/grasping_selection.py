@@ -40,7 +40,7 @@ class GraspSelector(LeafSystem):
         obj_traj = AbstractValue.Make(ObjectTrajectory())
         self.DeclareAbstractInputPort("object_pc", obj_pc)
         self.DeclareAbstractInputPort("object_trajectory", obj_traj)
-        
+
         port = self.DeclareAbstractOutputPort(
             "grasp_selection",
             lambda: AbstractValue.Make({RigidTransform(): 0}),  # dict mapping grasp to a grasp time
@@ -55,7 +55,7 @@ class GraspSelector(LeafSystem):
         self.random_transform = RigidTransform([-1, -1, 1])  # used for visualizing grasp candidates off to the side
         self.selected_grasp_obj_frame = None
         self.obj_catch_t = None
-        self.visualize = True 
+        self.visualize = True
 
 
     def draw_grasp_candidate(self, X_G, prefix="gripper", random_transform=True):
@@ -89,10 +89,10 @@ class GraspSelector(LeafSystem):
 
     def check_collision(self, obj_pc, X_G):
         """
-        TODO: Speed up this function. Setting up the diagram takes ~0.1 sec, 
+        TODO: Speed up this function. Setting up the diagram takes ~0.1 sec,
         actually computing SDF is also ~0.1 sec
 
-        Builds a new MBP and diagram with just the object and WSG, and computes 
+        Builds a new MBP and diagram with just the object and WSG, and computes
         SDF to check if there is collision.
         """
         builder = DiagramBuilder()
@@ -128,7 +128,7 @@ class GraspSelector(LeafSystem):
 
     def compute_darboux_frame(self, index, obj_pc, kdtree, ball_radius=0.002, max_nn=50):
         """
-        Given a index of the pointcloud, return a RigidTransform from origin of 
+        Given a index of the pointcloud, return a RigidTransform from origin of
         point cloud to the Darboux frame at that point.
 
         Args:
@@ -286,7 +286,7 @@ class GraspSelector(LeafSystem):
         return final_cost, distance_obj_pc_centroid_to_X_OG_y_axis, direction, alignment
 
 
-    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=500, random_seed=1):
+    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=1000, random_seed=1):
         """
         Args:
             - obj_pc (PointCloud object): pointcloud of the object.
@@ -316,8 +316,9 @@ class GraspSelector(LeafSystem):
             # if grasp isn't above thresholds, don't even bother checking for collision
             if grasp_CoM_cost > grasp_CoM_cost_threshold or direction_cost > direction_cost_threshold or collision_cost > collision_cost_threshold:
                 return
-            
+
             print("passed grasping thresholds")
+            print(new_X_OG_cost)
 
             # check_collision takes most of the runtime
             if (self.check_collision(obj_pc, new_X_OG) is not True) and self.check_nonempty(obj_pc, new_X_OG):  # no collision, and there is an object between fingers
@@ -330,11 +331,11 @@ class GraspSelector(LeafSystem):
         candidate_lst_lock = threading.Lock()
         for _ in range(candidate_num):
             random_idx = np.random.randint(0, obj_pc.size())
-            t = threading.Thread(target=compute_candidate, args=(random_idx, 
-                                                                obj_pc, 
-                                                                kdtree, 
-                                                                ball_radius, 
-                                                                candidate_lst_lock, 
+            t = threading.Thread(target=compute_candidate, args=(random_idx,
+                                                                obj_pc,
+                                                                kdtree,
+                                                                ball_radius,
+                                                                candidate_lst_lock,
                                                                 candidate_lst))
             threads.append(t)
             t.start()
@@ -346,9 +347,9 @@ class GraspSelector(LeafSystem):
             print("grasp sampling did not find any valid candidates.")
 
         return candidate_lst
-    
 
-    def SelectGrasp(self, context, output):      
+
+    def SelectGrasp(self, context, output):
         if self.selected_grasp_obj_frame is None:
             self.obj_pc = self.get_input_port(0).Eval(context).VoxelizedDownSample(voxel_size=0.001)
             self.obj_pc.EstimateNormals(0.05, 30)  # allows us to use obj_pc.normals() function later
@@ -357,7 +358,7 @@ class GraspSelector(LeafSystem):
             if (self.obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
                 print("received default traj (in SelectGrasp)")
                 return
-            
+
             self.meshcat.SetObject("cloud", self.obj_pc)
 
             obj_pc_centroid = np.mean(self.obj_pc.xyzs(), axis=1)  # column-wise mean of 3xN np array of points
@@ -382,7 +383,7 @@ class GraspSelector(LeafSystem):
                 # Object is between 420-750mm from iiwa's center in XY plane
                 if obj_dist_from_iiwa_squared > 0.42**2 and obj_dist_from_iiwa_squared < 0.75**2:
                     self.obj_reachable_end_t = t
-            
+
             # For now, all grasps will happen at 0.475 of when obj is in iiwa's work envelope
             obj_catch_t = 0.475*(self.obj_reachable_start_t + self.obj_reachable_end_t)
 

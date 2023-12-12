@@ -117,6 +117,7 @@ traj_pred_system = builder.AddSystem(TrajectoryPredictor(
     thrown_model_name=obj_name,
     ransac_iters=20,
     ransac_thresh=0.01,
+    ransac_rot_thresh=0.1,
     ransac_window=30,
     plant=plant,
     meshcat=meshcat
