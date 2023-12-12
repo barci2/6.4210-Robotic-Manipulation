@@ -29,13 +29,13 @@ from grasping_selection import GraspSelector
 from motion_planner import MotionPlanner
 
 ##### Settings #####
-seed = 130
+seed = 135
 close_button_str = "Close"
 scenario_file = "data/scenario.yaml"
 thrown_obj_prefix = "obj"
 this_drake_module_name = "cwd"
 point_cloud_cameras_center = [0, 0, 100]
-simulator_runtime = 1.25
+simulator_runtime = 1.1
 
 np.random.seed(seed)
 
@@ -113,7 +113,7 @@ traj_pred_system = builder.AddSystem(TrajectoryPredictor(
     cameras=icp_cameras,
     camera_transforms=icp_camera_transforms,
     pred_thresh=5,
-    pred_samples_thresh=4,  # how many views of object are needed before outputting predicted traj
+    pred_samples_thresh=10,  # how many views of object are needed before outputting predicted traj
     thrown_model_name=obj_name,
     ransac_iters=20,
     ransac_thresh=0.01,
@@ -181,7 +181,7 @@ body = plant.get_body(body_idx)
 plant.SetFreeBodyPose(plant_context, body, RigidTransform(point_cloud_cameras_center))
 obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableContextFromRoot(simulator_context))
 
-# For mustard bottle:
+# For pill bottle:
 throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 6))
 # For banana:
 # throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(-np.pi / 3))

@@ -647,7 +647,7 @@ class TrajectoryPredictor(CameraBackedSystem):
         self._traj_state = self.DeclareAbstractState(AbstractValue.Make(ObjectTrajectory()))
 
         # Update Event
-        self.DeclarePeriodicPublishEvent(0.03, 0.05, self.PredictTrajectory)
+        self.DeclarePeriodicPublishEvent(0.01, 0.05, self.PredictTrajectory)
 
         port = self.DeclareAbstractOutputPort(
             "object_trajectory",
