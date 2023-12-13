@@ -315,7 +315,7 @@ class TrajectoryPredictor(CameraBackedSystem):
         prev_cost = np.inf
         while True:
             d, i = self._point_kd_tree.query(p_s)
-            if np.allclose(prev_cost, d.mean(), atol=0.1):
+            if np.allclose(prev_cost, d.mean()):
                 break
             prev_cost = d.mean()
 
@@ -370,6 +370,7 @@ class TrajectoryPredictor(CameraBackedSystem):
                 best_traj = traj_guess
                 best_match_count = match_count
                 best_match_cost = match_cost
+
 
         # Plot spheres along predicted trajectory
         for t in np.linspace(0, 2, 400):

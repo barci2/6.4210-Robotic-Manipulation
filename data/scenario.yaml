@@ -56,21 +56,21 @@ directives:
 #             translation: [0, 0, 100]
 #             rotation: !Rpy { deg: [0, 0, 0] }
 
-# - add_model:
-#     name: "obj_banana"
-#     file: "package://cwd/data/Banana.sdf"
-#     default_free_body_pose:
-#         "Banana":
-#             translation: [0, 0, 100]
-#             rotation: !Rpy { deg: [0, 0, 0] }
-
 - add_model:
-    name: "obj_pill_bottle"
-    file: "package://cwd/data/pill_bottle.sdf"
+    name: "obj_banana"
+    file: "package://cwd/data/Banana.sdf"
     default_free_body_pose:
-        "pill_bottle":
+        "Banana":
             translation: [0, 0, 100]
             rotation: !Rpy { deg: [0, 0, 0] }
+
+# - add_model:
+#     name: "obj_pill_bottle"
+#     file: "package://cwd/data/pill_bottle.sdf"
+#     default_free_body_pose:
+#         "pill_bottle":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
 
 # - add_model:
 #     name: "obj_mustard_bottle"
