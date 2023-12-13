@@ -48,13 +48,13 @@ directives:
 # Object Setup #
 ################
 
-# - add_model:
-#     name: "obj_tennis_ball"
-#     file: "package://cwd/data/Tennis_ball.sdf"
-#     default_free_body_pose:
-#         "Tennis_ball":
-#             translation: [0, 0, 100]
-#             rotation: !Rpy { deg: [0, 0, 0] }
+- add_model:
+    name: "obj_tennis_ball"
+    file: "package://cwd/data/Tennis_ball.sdf"
+    default_free_body_pose:
+        "Tennis_ball":
+            translation: [0, 0, 100]
+            rotation: !Rpy { deg: [0, 0, 0] }
 
 # - add_model:
 #     name: "obj_banana"
@@ -64,13 +64,13 @@ directives:
 #             translation: [0, 0, 100]
 #             rotation: !Rpy { deg: [0, 0, 0] }
 
-- add_model:
-    name: "obj_pill_bottle"
-    file: "package://cwd/data/pill_bottle.sdf"
-    default_free_body_pose:
-        "pill_bottle":
-            translation: [0, 0, 100]
-            rotation: !Rpy { deg: [0, 0, 0] }
+# - add_model:
+#     name: "obj_pill_bottle"
+#     file: "package://cwd/data/pill_bottle.sdf"
+#     default_free_body_pose:
+#         "pill_bottle":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
 
 # - add_model:
 #     name: "obj_mustard_bottle"

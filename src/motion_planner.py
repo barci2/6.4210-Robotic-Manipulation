@@ -537,7 +537,7 @@ class MotionPlanner(LeafSystem):
 
                 # Also set the WSG trajectory once (this doesn't need to be updated in future cycles)
                 close_time = 0.05
-                time_offset = -0.055
+                time_offset = -0.0475
                 wsg_open_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
                     [0, obj_catch_t+time_offset],
                     np.array([[1, 1]])
