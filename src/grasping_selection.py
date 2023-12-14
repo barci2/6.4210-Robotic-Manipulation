@@ -318,7 +318,7 @@ class GraspSelector(LeafSystem):
             new_X_OG = X_OF @ RigidTransform(np.array([0, y_offset, 0]))  # Move gripper back by fixed amount
 
             grasp_CoM_cost_threshold = 0.030  # range: 0 - 0.05
-            direction_cost_threshold = 0.435  # range: 0 - 2
+            direction_cost_threshold = 0.400  # range: 0 - 2
             collision_cost_threshold = 0.100  # range: 0 - 2
             new_X_OG_cost, grasp_CoM_cost, direction_cost, collision_cost = self.compute_grasp_cost(obj_pc_centroid, new_X_OG, obj_catch_t)
             # if grasp isn't above thresholds, don't even bother checking for collision (which is slow)

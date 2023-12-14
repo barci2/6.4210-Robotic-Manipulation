@@ -58,12 +58,12 @@ class MotionPlanner(LeafSystem):
                                                     )]))
         )
 
-        self._traj_wsg_index = self.DeclareAbstractState(
-            AbstractValue.Make(CompositeTrajectory([PiecewisePolynomial.FirstOrderHold(
-                                                        [0, 1],
-                                                        np.array([[0, 0]])
-                                                    )]))
-        )
+        # self._traj_wsg_index = self.DeclareAbstractState(
+        #     AbstractValue.Make(CompositeTrajectory([PiecewisePolynomial.FirstOrderHold(
+        #                                                 [0, 1],
+        #                                                 np.array([[0, 0]])
+        #                                             )]))
+        # )
 
         self.DeclareVectorOutputPort(
             "iiwa_command", 14, self.output_traj  # 7 pos, 7 vel
@@ -82,6 +82,8 @@ class MotionPlanner(LeafSystem):
         self.q_nominal = np.array([0.0, 0.6, 0.0, -1.75, 0.0, 1.0, 0.0])  # nominal joint for joint-centering
         self.q_end = None
         self.previous_compute_result = None  # BpslineTrajectory object
+
+        self.desired_wsg_state = 1  # default open
 
         self.DeclarePeriodicUnrestrictedUpdateEvent(0.025, 0.0, self.compute_traj)
 
@@ -538,7 +540,8 @@ class MotionPlanner(LeafSystem):
                     print(result.GetInfeasibleConstraintNames(prog))
                     if final_traj is None:  # ensure final_traj is not None
                         final_traj = trajopt.ReconstructTrajectory(result)
-                    raise RuntimeError()
+                    # raise RuntimeError()
+                    break
                 else:
                     print(f"num_iter={num_iter} Solve succeeded.")
 
@@ -554,21 +557,21 @@ class MotionPlanner(LeafSystem):
 
                 num_iter += 1
 
-                # Also set the WSG trajectory once (this doesn't need to be updated in future cycles)
-                close_time = 0.0001
-                time_offset = 0.0#-0.01
-                wsg_open_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
-                    [0, obj_catch_t+time_offset],
-                    np.array([[0.1, 0.1]])
-                )
-                wsg_close_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
-                    [obj_catch_t+time_offset, obj_catch_t+time_offset+close_time],
-                    np.array([[0.1, 0]])
-                )
+                # # Also set the WSG trajectory once (this doesn't need to be updated in future cycles)
+                # close_time = 0.0001
+                # time_offset = 0.0#-0.01
+                # wsg_open_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
+                #     [0, obj_catch_t+time_offset],
+                #     np.array([[0.1, 0.1]])
+                # )
+                # wsg_close_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
+                #     [obj_catch_t+time_offset, obj_catch_t+time_offset+close_time],
+                #     np.array([[0.1, 0]])
+                # )
 
-                wsg_complete_traj = CompositeTrajectory([wsg_open_traj, wsg_close_traj])
+                # wsg_complete_traj = CompositeTrajectory([wsg_open_traj, wsg_close_traj])
 
-                state.get_mutable_abstract_state(int(self._traj_wsg_index)).set_value(wsg_complete_traj)
+                # state.get_mutable_abstract_state(int(self._traj_wsg_index)).set_value(wsg_complete_traj)
 
         # If this is not the first cycle (so we have a good initial guess already), then just go straight to an optimization w/strict constraints
         else:
@@ -695,6 +698,45 @@ class MotionPlanner(LeafSystem):
 
 
     def output_wsg_traj(self, context, output):
-        traj_wsg = context.get_mutable_abstract_state(int(self._traj_wsg_index)).get_value()
-        # print(f"wsg output: {traj_wsg.value(context.get_time())}")
-        output.SetFromVector(traj_wsg.value(context.get_time()))
+        # traj_wsg = context.get_mutable_abstract_state(int(self._traj_wsg_index)).get_value()
+        # # print(f"wsg output: {traj_wsg.value(context.get_time())}")
+        # output.SetFromVector(traj_wsg.value(context.get_time()))
+
+
+        # Get current gripper pose from input port
+        body_poses = self.get_input_port(1).Eval(context)  # "iiwa_current_pose" input port
+        gripper_body_idx = self.original_plant.GetBodyByName("body").index()  # BodyIndex object
+        current_gripper_pose = body_poses[gripper_body_idx]  # RigidTransform object
+
+        # find body index of obj being thrown
+        if self.original_plant.HasBodyNamed("Tennis_ball"):
+            obj_body_name = "Tennis_ball"
+        elif self.original_plant.HasBodyNamed("Banana"):
+            obj_body_name = "Banana"
+        elif self.original_plant.HasBodyNamed("pill_bottle"):
+            obj_body_name = "pill_bottle"
+
+        # Get current object pose from input port
+        obj_body_idx = self.original_plant.GetBodyByName(obj_body_name).index()  # BodyIndex object
+        current_obj_pose = body_poses[obj_body_idx]  # RigidTransform object
+
+        # Get distance in gripper frame z-axis from gripper y-axis ray object pose using vector projections
+        vector_gripper_to_obj = current_obj_pose.translation() - current_gripper_pose.translation()
+        vector_gripper_y_axis = current_gripper_pose.rotation().matrix()[:, 1]
+        projection_vector_gripper_to_obj_onto_vector_gripper_y_axis = (np.dot(vector_gripper_to_obj, vector_gripper_y_axis) / np.linalg.norm(vector_gripper_y_axis)) * vector_gripper_y_axis  # Equation for projection of one vector onto another
+        distance_vector = vector_gripper_to_obj - projection_vector_gripper_to_obj_onto_vector_gripper_y_axis
+        # Project distance only to gripper frame z-axis so that deviations in other axes don't affect the time at which the grippers close
+        vector_gripper_z_axis = current_gripper_pose.rotation().matrix()[:, 2]
+        projection_distance_vector_onto_gripper_frame_z_axis = (np.dot(distance_vector, vector_gripper_z_axis) / np.linalg.norm(vector_gripper_z_axis)) * vector_gripper_z_axis  # Equation for projection of one vector onto another
+        
+        obj_distance_to_grasp = np.linalg.norm(projection_distance_vector_onto_gripper_frame_z_axis)
+
+        DISTANCE_TRESHOLD_TO_GRASP = 0.01
+
+        # first comparison measures distance in general (to ensure obj is roughly in range for a catch); 
+        # second comparison is more precise, measures obj distance to grasp in gripper frame z-axis
+        if (np.linalg.norm(vector_gripper_to_obj) < 0.25 and obj_distance_to_grasp < DISTANCE_TRESHOLD_TO_GRASP) or self.desired_wsg_state == 0:
+            output.SetFromVector(np.array([0]))  # closed
+            self.desired_wsg_state = 0  # grippers should be closed from now on
+        else:
+            output.SetFromVector(np.array([1]))  # open

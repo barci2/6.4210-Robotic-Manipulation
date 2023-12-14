@@ -185,11 +185,11 @@ plant.SetFreeBodyPose(plant_context, body, RigidTransform(point_cloud_cameras_ce
 obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableContextFromRoot(simulator_context))
 
 # For tennis ball:
-throw_object(plant, plant_context, obj_name, RotationMatrix())
-# For pill bottle:
-# throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 6))
+# throw_object(plant, plant_context, obj_name, RotationMatrix())
 # For banana:
-throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
+# throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
+# For pill bottle:
+throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 4))
 
 # Example camera view
 # plt.imshow(icp_cameras[17].depth_image_32F_output_port().Eval(icp_cameras[17].GetMyContextFromRoot(simulator_context)).data[::-1])

@@ -59,3 +59,4 @@ python3 src/smain.py
 
 ## Notes
  - `station.py` is a modified of `station.py` directly from drake. We imported it so that we could modify it such that we can export the `desired_acceleration` input port and also so that we could modify the PID gains of the WSG gripper.
+ - In the SDF file of the object to be caught, the origin in the SDF file MUST roughly be at the object's centroid.
