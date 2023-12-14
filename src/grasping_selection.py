@@ -55,7 +55,7 @@ class GraspSelector(LeafSystem):
         self.random_transform = RigidTransform([-1, -1, 1])  # used for visualizing grasp candidates off to the side
         self.selected_grasp_obj_frame = None
         self.obj_catch_t = None
-        self.visualize = False
+        self.visualize = True
 
 
     def draw_grasp_candidate(self, X_G, prefix="gripper", random_transform=True):
@@ -286,7 +286,7 @@ class GraspSelector(LeafSystem):
         return final_cost, distance_obj_pc_centroid_to_X_OG_y_axis, direction, alignment
 
 
-    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=500, random_seed=1):
+    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=1000, random_seed=1):
         """
         Args:
             - obj_pc (PointCloud object): pointcloud of the object.
@@ -309,9 +309,9 @@ class GraspSelector(LeafSystem):
 
             new_X_OG = X_OF @ RigidTransform(np.array([0, -0.05, 0]))  # Move gripper back by fixed amount
 
-            grasp_CoM_cost_threshold = 0.040  # range: 0 - 0.05
-            direction_cost_threshold = 0.750  # range: 0 - 2
-            collision_cost_threshold = 0.200  # range: 0 - 2
+            grasp_CoM_cost_threshold = 0.030  # range: 0 - 0.05
+            direction_cost_threshold = 0.435  # range: 0 - 2
+            collision_cost_threshold = 0.100  # range: 0 - 2
             new_X_OG_cost, grasp_CoM_cost, direction_cost, collision_cost = self.compute_grasp_cost(obj_pc_centroid, new_X_OG, obj_catch_t)
             # if grasp isn't above thresholds, don't even bother checking for collision (which is slow)
             if grasp_CoM_cost > grasp_CoM_cost_threshold or direction_cost > direction_cost_threshold or collision_cost > collision_cost_threshold:
@@ -352,7 +352,7 @@ class GraspSelector(LeafSystem):
 
     def SelectGrasp(self, context, output):
         if self.selected_grasp_obj_frame is None:
-            self.obj_pc = self.get_input_port(0).Eval(context).VoxelizedDownSample(voxel_size=0.001)
+            self.obj_pc = self.get_input_port(0).Eval(context).VoxelizedDownSample(voxel_size=0.0025)
             self.obj_pc.EstimateNormals(0.05, 30)  # allows us to use obj_pc.normals() function later
             self.obj_traj = self.get_input_port(1).Eval(context)
 

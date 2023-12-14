@@ -187,7 +187,7 @@ obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableCont
 # For pill bottle:
 # throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 6))
 # For banana:
-throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(-np.pi / 4))
+throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
 # For tennis ball, use either (it's a ball)
 
 # Example camera view

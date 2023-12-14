@@ -34,9 +34,6 @@ python3 src/smain.py
 ```
 
 ## Discussion of Architecture
-
-The overall architecture is based largely on this example: https://deepnote.com/workspace/Manipulation-ac8201a1-470a-4c77-afd0-2cc45bc229ff/project/05-Bin-Picking-8e10b301-2776-448f-be43-c7f6fb54fa1f/notebook/clutter_clearing-1723573aa07d4d709fa3d410a3b5d2fe?
-
  - The program contains 3 core "systems":
     1. Object Ballistic Trajectory Estimator
         - Input ports:
@@ -59,21 +56,6 @@ The overall architecture is based largely on this example: https://deepnote.com/
     3. `SELECTING_GRASP`
     4. `PLANNING_EXECUTING_TRAJECTORY`
     5. `RETURNING_HOME`
- - The "catching system" (including robot and cameras) itself will be implemented using a MultibodyPlant
- - The objects being thrown 
 
-
-## Future Directions
- - Allow thrown objects to go directly at iiwa (this makes catching harder)
- - Use more 
- 
 ## Notes
-
- - Example for motion trajectory opt: https://deepnote.com/workspace/michael-zengs-workspace-61364779-69ef-470a-9f8e-02bf2b4f369c/project/06-Motion-Planning-Duplicate-c2fb7d28-4b8e-4834-ba5a-a1d69c1d218b/notebook/kinematic_trajectory_optimization-fdbbd9de17a44076a3321ed596648a24?
-
- - adding YCB objects (in YAML): 
-    ```
-    - add_model:
-        name: ycb{i}
-        file: package://manipulation/hydro/{ycb[object_num]}
-    ```
+ - `station.py` is a modified of `station.py` directly from drake. We imported it so that we could modify it such that we can export the `desired_acceleration` input port and also so that we could modify the PID gains of the WSG gripper.

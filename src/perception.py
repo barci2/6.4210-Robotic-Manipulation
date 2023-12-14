@@ -152,8 +152,8 @@ class CameraBackedSystem(LeafSystem):
             focal_x = camera_info.focal_x()
             focal_y = camera_info.focal_y()
 
-            depth_img = depth_input.Eval(context).data#[::-1, :]
-            label_img = label_input.Eval(context).data#[::-1, :]
+            depth_img = depth_input.Eval(context).data[::-1, :]
+            label_img = label_input.Eval(context).data[::-1, :]
             u_coords, v_coords, _ = np.meshgrid(np.arange(width), np.arange(height), [0], copy=False)
             distances_coords = np.stack([u_coords, v_coords, depth_img], axis=-1)
             depth_pixel = distances_coords[np.logical_and(label_img == self._obj_idx, np.abs(depth_img) != np.inf)]
