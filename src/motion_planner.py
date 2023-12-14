@@ -247,9 +247,9 @@ class MotionPlanner(LeafSystem):
                         current_gripper_vel,
                         duration_target,
                         acceptable_dur_err=0.01,
-                        acceptable_pos_err=0.01,
+                        acceptable_pos_err=0.02,
                         theta_bound = 0.1,
-                        acceptable_vel_err=0.2):
+                        acceptable_vel_err=0.4):
 
         # trajopt.AddPathLengthCost(1.0)
 
@@ -265,10 +265,12 @@ class MotionPlanner(LeafSystem):
         # gripper_early_time = 0.08 / np.linalg.norm(obj_vel_at_catch)
         # print(f"gripper_early_time: {gripper_early_time}")
         # duration_target -= gripper_early_time
-        catch_time_normalized = duration_target / (duration_target + 0.5)
-        duration_target += 0.5
 
-        pre_gripper_time = duration_target - 0.5 - 0.12
+        pre_catch_time_offset = 0.6
+        catch_time_normalized = duration_target / (duration_target + pre_catch_time_offset)
+        duration_target += pre_catch_time_offset
+
+        pre_gripper_time = duration_target - pre_catch_time_offset - 0.12
         pre_gripper_normalized_time = pre_gripper_time / duration_target
         X_WO = obj_traj.value(obj_catch_t)
         X_OG_W = X_WO.inverse() @ X_WGoal
@@ -313,8 +315,8 @@ class MotionPlanner(LeafSystem):
         pre_goal_pos_constraint = PositionConstraint(
             plant,
             world_frame,
-            X_WPreGoal.translation() - max(acceptable_pos_err * 7, 0.2),  # lower limit
-            X_WPreGoal.translation() + max(acceptable_pos_err * 7, 0.2),  # upper limit
+            X_WPreGoal.translation() - max(acceptable_pos_err * 25, 0.2),  # lower limit
+            X_WPreGoal.translation() + max(acceptable_pos_err * 25, 0.2),  # upper limit
             gripper_frame,
             [0, 0, 0.1],
             plant_context
@@ -350,6 +352,7 @@ class MotionPlanner(LeafSystem):
             theta_bound,
             plant_context
         )
+        print(f"catch_time_normalized: {catch_time_normalized}")
         trajopt.AddPathPositionConstraint(goal_pos_constraint, catch_time_normalized)
         trajopt.AddPathPositionConstraint(goal_orientation_constraint, catch_time_normalized)
 

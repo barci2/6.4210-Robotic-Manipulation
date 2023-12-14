@@ -252,6 +252,7 @@ class TrajectoryPredictor(CameraBackedSystem):
         self._ransac_thresh = ransac_thresh
         self._ransac_rot_thresh = ransac_rot_thresh
         self._ransac_window = ransac_window
+        self._estimate_pose = False
         if "ball" in thrown_model_name:
             self._estimate_pose = False
             print(f"Object is a ball; has rotational symmetry. Predicting translation only (no rotation).")

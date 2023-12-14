@@ -153,7 +153,7 @@ controller_iiwa = AddIiwa(controller_plant)
 controller_plant.Finalize()
 num_iiwa_positions = controller_plant.num_positions()
 # controller = builder.AddSystem(InverseDynamicsController(controller_plant, [100]*num_iiwa_positions, [1]*num_iiwa_positions, [20]*num_iiwa_positions, True))
-controller = builder.AddSystem(InverseDynamicsController(controller_plant, [200]*num_iiwa_positions, [1]*num_iiwa_positions, [20]*num_iiwa_positions, True))
+controller = builder.AddSystem(InverseDynamicsController(controller_plant, [300]*num_iiwa_positions, [1]*num_iiwa_positions, [20]*num_iiwa_positions, True))
 builder.Connect(station.GetOutputPort("iiwa_state"), controller.GetInputPort("estimated_state"))
 builder.Connect(motion_planner.GetOutputPort("iiwa_command"), controller.GetInputPort("desired_state"))
 builder.Connect(motion_planner.GetOutputPort("iiwa_acceleration"), controller.GetInputPort("desired_acceleration"))
@@ -193,27 +193,24 @@ obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableCont
 # depending on throw trajectory, modify object angle
 if throw_distance == "close":
     # For tennis ball:
-    throw_object_close(plant, plant_context, obj_name, RotationMatrix())
+    # throw_object_close(plant, plant_context, obj_name, RotationMatrix())
     # For banana:
     # throw_object_close(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
     # For pill bottle:
-    # throw_object_close(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 4))
+    throw_object_close(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 3.8))
 
 elif throw_distance == "far":
     # For tennis ball:
-    throw_object_far(plant, plant_context, obj_name, RotationMatrix())
+    # throw_object_far(plant, plant_context, obj_name, RotationMatrix())
     # For banana:
     # throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
     # For pill bottle:
-    # throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 4))
+    throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 4))
 
 # Example camera view
 # plt.imshow(icp_cameras[17].depth_image_32F_output_port().Eval(icp_cameras[17].GetMyContextFromRoot(simulator_context)).data[::-1])
 # plt.show()
 
-# scene_graph_context = scene_graph.GetMyMutableContextFromRoot(simulator_context) # TESTING
-# query_object = scene_graph.get_query_output_port().Eval(scene_graph_context) # TESTING
-# print(query_object.ComputeSignedDistanceToPoint([-2, 0, 0])) # TESTING
 
 ####################################
 ### Running Simulation & Meshcat ###

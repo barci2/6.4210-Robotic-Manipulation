@@ -83,8 +83,8 @@ def throw_object_close(plant: MultibodyPlant, plant_context: Context, obj_name: 
     # Unlock joint so object is subject to gravity
     joint.Unlock(plant_context)
 
-    v_magnitude = np.random.uniform(2.5, 2.75)#np.random.uniform(4.75, 5.0)
-    angle_perturb = -np.random.uniform(0.2, 0.21) #* np.random.choice([-1, 1]) # must perturb by at least 0.1 rad to avoid throwing directly at iiwa
+    v_magnitude = np.random.uniform(3.0, 3.1)#np.random.uniform(4.75, 5.0)
+    angle_perturb = -np.random.uniform(0.18, 0.19) #* np.random.choice([-1, 1]) # must perturb by at least 0.1 rad to avoid throwing directly at iiwa
     # ensure the perturbation is applied such that it directs the obj away from iiwa
     if x * y > 0:  # x and y have same sign
         cos_alpha = x / np.sqrt(x**2 + y**2) + angle_perturb
@@ -95,7 +95,7 @@ def throw_object_close(plant: MultibodyPlant, plant_context: Context, obj_name: 
     z_perturb = np.random.uniform(-0.1, 0.1)
     v_x = -v_magnitude * cos_alpha
     v_y = -v_magnitude * sin_alpha
-    v_z = 4.4 + z_perturb
+    v_z = 3.7 + z_perturb
 
     # Define the spatial velocity
     spatial_velocity = SpatialVelocity(
