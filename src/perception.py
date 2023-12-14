@@ -152,8 +152,8 @@ class CameraBackedSystem(LeafSystem):
             focal_x = camera_info.focal_x()
             focal_y = camera_info.focal_y()
 
-            depth_img = depth_input.Eval(context).data[::-1, :]
-            label_img = label_input.Eval(context).data[::-1, :]
+            depth_img = depth_input.Eval(context).data#[::-1]
+            label_img = label_input.Eval(context).data#[::-1]
             u_coords, v_coords, _ = np.meshgrid(np.arange(width), np.arange(height), [0], copy=False)
             distances_coords = np.stack([u_coords, v_coords, depth_img], axis=-1)
             depth_pixel = distances_coords[np.logical_and(label_img == self._obj_idx, np.abs(depth_img) != np.inf)]
@@ -235,6 +235,7 @@ class TrajectoryPredictor(CameraBackedSystem):
             ransac_window: int,
             thrown_model_name: str,
             plant: MultibodyPlant,
+            estimate_pose: bool = True,
             meshcat: Optional[Meshcat] = None,
         ):
         super().__init__(
@@ -252,12 +253,7 @@ class TrajectoryPredictor(CameraBackedSystem):
         self._ransac_thresh = ransac_thresh
         self._ransac_rot_thresh = ransac_rot_thresh
         self._ransac_window = ransac_window
-        self._estimate_pose = False
-        if "ball" in thrown_model_name:
-            self._estimate_pose = False
-            print(f"Object is a ball; has rotational symmetry. Predicting translation only (no rotation).")
-        else:
-            self._estimate_pose = True
+        self._estimate_pose = estimate_pose
         # AddMeshcatTriad(self._meshcat, "obj_transform")
 
         # Input port for object point cloud for ICP
@@ -341,9 +337,10 @@ class TrajectoryPredictor(CameraBackedSystem):
 
             p_s = (X_star @ p_s.T).T
             X = X_star @ X
+        X = X.inverse()
         if not self._estimate_pose:
             X.set_rotation(RotationMatrix())
-        return X.inverse()
+        return X
 
     def _update_ransac(self, context: Context, X: RigidTransform):
         poses_state = context.get_abstract_state(self._poses_state)
