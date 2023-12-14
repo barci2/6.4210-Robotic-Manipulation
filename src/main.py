@@ -129,7 +129,7 @@ traj_pred_system.ConnectCameras(builder, icp_cameras)
 builder.Connect(obj_point_cloud_system.GetOutputPort("point_cloud"), traj_pred_system.point_cloud_input_port)
 
 ### Grasp Selector
-grasp_selector = builder.AddSystem(GraspSelector(plant, scene_graph, meshcat))
+grasp_selector = builder.AddSystem(GraspSelector(plant, scene_graph, meshcat, obj_name))
 builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), grasp_selector.GetInputPort("object_trajectory"))
 builder.Connect(obj_point_cloud_system.GetOutputPort("point_cloud"), grasp_selector.GetInputPort("object_pc"))
 
@@ -184,11 +184,12 @@ body = plant.get_body(body_idx)
 plant.SetFreeBodyPose(plant_context, body, RigidTransform(point_cloud_cameras_center))
 obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableContextFromRoot(simulator_context))
 
+# For tennis ball:
+throw_object(plant, plant_context, obj_name, RotationMatrix())
 # For pill bottle:
 # throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 6))
 # For banana:
 throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
-# For tennis ball, use either (it's a ball)
 
 # Example camera view
 # plt.imshow(icp_cameras[17].depth_image_32F_output_port().Eval(icp_cameras[17].GetMyContextFromRoot(simulator_context)).data[::-1])

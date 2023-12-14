@@ -363,8 +363,7 @@ class MotionPlanner(LeafSystem):
             plant_autodiff.CreateDefaultContext(),
         )
 
-        # end with velocity equal to object's velocity at that moment
-        # DIVISION BY 3 IS TEMPORARY; HAVING SUCH HIGH ENDING VELOCITY MAKES IT VERY HARD FOR SNOPT TO SOLVE
+        # end with same directional velocity as object at catch
         catch_vel = obj_vel_at_catch * 0.3 # (3,1) np array
         final_vel_constraint = SpatialVelocityConstraint(
             plant_autodiff,
@@ -418,7 +417,6 @@ class MotionPlanner(LeafSystem):
                                                       j_plant.world_frame()  # frame that translational velocity should be expressed in
                                                       )
         current_gripper_vel = np.dot(J, iiwa_vels)
-        # print(f"current_gripper_vel: {current_gripper_vel}")
 
         # Get selected grasp pose from input port
         grasp = self.get_input_port(0).Eval(context)
@@ -531,11 +529,7 @@ class MotionPlanner(LeafSystem):
                                      acceptable_pos_err=cur_acceptable_pos_err,
                                      theta_bound=cur_theta_bound,
                                      acceptable_vel_err=cur_acceptable_vel_err)
-
-                # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
-                # trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
-                # trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
-
+                
                 # First solve with looser constraints
                 solver = SnoptSolver()
                 result = solver.Solve(prog)
@@ -575,8 +569,6 @@ class MotionPlanner(LeafSystem):
                 wsg_complete_traj = CompositeTrajectory([wsg_open_traj, wsg_close_traj])
 
                 state.get_mutable_abstract_state(int(self._traj_wsg_index)).set_value(wsg_complete_traj)
-
-                # Also set post-catch end position once (this doesn't ned to be updated in future cycles either)
 
         # If this is not the first cycle (so we have a good initial guess already), then just go straight to an optimization w/strict constraints
         else:

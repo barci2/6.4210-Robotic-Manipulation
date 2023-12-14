@@ -235,7 +235,6 @@ class TrajectoryPredictor(CameraBackedSystem):
             ransac_window: int,
             thrown_model_name: str,
             plant: MultibodyPlant,
-            estimate_pose: bool = True,
             meshcat: Optional[Meshcat] = None,
         ):
         super().__init__(
@@ -253,7 +252,11 @@ class TrajectoryPredictor(CameraBackedSystem):
         self._ransac_thresh = ransac_thresh
         self._ransac_rot_thresh = ransac_rot_thresh
         self._ransac_window = ransac_window
-        self._estimate_pose= estimate_pose
+        if "ball" in thrown_model_name:
+            self._estimate_pose = False
+            print(f"Object is a ball; has rotational symmetry. Predicting translation only (no rotation).")
+        else:
+            self._estimate_pose = True
         # AddMeshcatTriad(self._meshcat, "obj_transform")
 
         # Input port for object point cloud for ICP

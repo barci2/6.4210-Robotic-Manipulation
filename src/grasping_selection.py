@@ -33,7 +33,7 @@ class GraspSelector(LeafSystem):
     sample potential grasps until finding one at a desirable position for iiwa.
     """
 
-    def __init__(self, plant, scene_graph, meshcat):
+    def __init__(self, plant, scene_graph, meshcat, thrown_model_name):
         LeafSystem.__init__(self)
 
         obj_pc = AbstractValue.Make(PointCloud())
@@ -52,6 +52,7 @@ class GraspSelector(LeafSystem):
         self.plant = plant
         self.scene_graph = scene_graph
         self.meshcat = meshcat
+        self.thrown_model_name = thrown_model_name
         self.random_transform = RigidTransform([-1, -1, 1])  # used for visualizing grasp candidates off to the side
         self.selected_grasp_obj_frame = None
         self.obj_catch_t = None
@@ -307,7 +308,14 @@ class GraspSelector(LeafSystem):
         def compute_candidate(idx, obj_pc, kdtree, ball_radius, candidate_lst_lock, candidate_lst):
             X_OF = self.compute_darboux_frame(idx, obj_pc, kdtree, ball_radius)  # find Darboux frame of random point
 
-            new_X_OG = X_OF @ RigidTransform(np.array([0, -0.05, 0]))  # Move gripper back by fixed amount
+            # offset gripper pose from object centroid depending on object size
+            if "banana" in self.thrown_model_name.lower():
+                y_offset = -0.04
+            if "ball" in self.thrown_model_name.lower():
+                y_offset = -0.05
+            if "bottle" in self.thrown_model_name.lower():
+                y_offset = -0.05
+            new_X_OG = X_OF @ RigidTransform(np.array([0, y_offset, 0]))  # Move gripper back by fixed amount
 
             grasp_CoM_cost_threshold = 0.030  # range: 0 - 0.05
             direction_cost_threshold = 0.435  # range: 0 - 2
