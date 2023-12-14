@@ -35,7 +35,7 @@ scenario_file = "data/scenario.yaml"
 thrown_obj_prefix = "obj"
 this_drake_module_name = "cwd"
 point_cloud_cameras_center = [0, 0, 100]
-simulator_runtime = 1.1
+simulator_runtime = 1.0
 
 np.random.seed(seed)
 
@@ -81,7 +81,7 @@ icp_cameras, icp_camera_transforms = add_cameras(
     camera_height=600,
     horizontal_num=8,
     vertical_num=5,
-    camera_distance=5,
+    camera_distance=7,
     cameras_center=[0, 0, 0]
 )
 
@@ -93,7 +93,7 @@ point_cloud_cameras, point_cloud_camera_transforms = add_cameras(
     camera_height=600,
     horizontal_num=8,
     vertical_num=4,
-    camera_distance=6,
+    camera_distance=1,
     cameras_center=point_cloud_cameras_center
 )
 
@@ -113,7 +113,7 @@ traj_pred_system = builder.AddSystem(TrajectoryPredictor(
     cameras=icp_cameras,
     camera_transforms=icp_camera_transforms,
     pred_thresh=5,
-    pred_samples_thresh=9,  # how many views of object are needed before outputting predicted traj
+    pred_samples_thresh=10,  # how many views of object are needed before outputting predicted traj
     thrown_model_name=obj_name,
     ransac_iters=20,
     ransac_thresh=0.01,

@@ -528,10 +528,10 @@ class MotionPlanner(LeafSystem):
                 self.VisualizePath(final_traj, f"traj iter={num_iter}")
 
                 # Make constraints more strict next iteration
-                cur_acceptable_duration_err *= 0.9
-                cur_acceptable_pos_err *= 0.9
-                cur_theta_bound *= 0.9
-                cur_acceptable_vel_err *= 0.9
+                cur_acceptable_duration_err *= 0.875
+                cur_acceptable_pos_err *= 0.875
+                cur_theta_bound *= 0.875
+                cur_acceptable_vel_err *= 0.875
 
                 num_iter += 1
 

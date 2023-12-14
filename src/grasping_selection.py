@@ -286,7 +286,7 @@ class GraspSelector(LeafSystem):
         return final_cost, distance_obj_pc_centroid_to_X_OG_y_axis, direction, alignment
 
 
-    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=500, random_seed=5):
+    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=500, random_seed=1):
         """
         Args:
             - obj_pc (PointCloud object): pointcloud of the object.
@@ -311,7 +311,7 @@ class GraspSelector(LeafSystem):
 
             grasp_CoM_cost_threshold = 0.040  # range: 0 - 0.05
             direction_cost_threshold = 0.750  # range: 0 - 2
-            collision_cost_threshold = 0.250  # range: 0 - 2
+            collision_cost_threshold = 0.200  # range: 0 - 2
             new_X_OG_cost, grasp_CoM_cost, direction_cost, collision_cost = self.compute_grasp_cost(obj_pc_centroid, new_X_OG, obj_catch_t)
             # if grasp isn't above thresholds, don't even bother checking for collision (which is slow)
             if grasp_CoM_cost > grasp_CoM_cost_threshold or direction_cost > direction_cost_threshold or collision_cost > collision_cost_threshold:
