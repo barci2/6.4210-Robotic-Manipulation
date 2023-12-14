@@ -247,9 +247,9 @@ class MotionPlanner(LeafSystem):
                         current_gripper_vel,
                         duration_target,
                         acceptable_dur_err=0.01,
-                        acceptable_pos_err=0.02,
-                        theta_bound = 0.4,
-                        acceptable_vel_err=0.1):
+                        acceptable_pos_err=0.01,
+                        theta_bound = 0.1,
+                        acceptable_vel_err=0.2):
 
         # trajopt.AddPathLengthCost(1.0)
 
@@ -557,22 +557,6 @@ class MotionPlanner(LeafSystem):
 
                 num_iter += 1
 
-                # # Also set the WSG trajectory once (this doesn't need to be updated in future cycles)
-                # close_time = 0.0001
-                # time_offset = 0.0#-0.01
-                # wsg_open_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
-                #     [0, obj_catch_t+time_offset],
-                #     np.array([[0.1, 0.1]])
-                # )
-                # wsg_close_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
-                #     [obj_catch_t+time_offset, obj_catch_t+time_offset+close_time],
-                #     np.array([[0.1, 0]])
-                # )
-
-                # wsg_complete_traj = CompositeTrajectory([wsg_open_traj, wsg_close_traj])
-
-                # state.get_mutable_abstract_state(int(self._traj_wsg_index)).set_value(wsg_complete_traj)
-
         # If this is not the first cycle (so we have a good initial guess already), then just go straight to an optimization w/strict constraints
         else:
             # Undraw previous trajctories that aren't actually being followed
@@ -598,10 +582,6 @@ class MotionPlanner(LeafSystem):
                                  obj_catch_t,
                                  current_gripper_vel,
                                  duration_target=obj_catch_t-context.get_time())
-
-            # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
-            # trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
-            # trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
             trajopt.SetInitialGuess(self.previous_compute_result)
 
@@ -698,11 +678,6 @@ class MotionPlanner(LeafSystem):
 
 
     def output_wsg_traj(self, context, output):
-        # traj_wsg = context.get_mutable_abstract_state(int(self._traj_wsg_index)).get_value()
-        # # print(f"wsg output: {traj_wsg.value(context.get_time())}")
-        # output.SetFromVector(traj_wsg.value(context.get_time()))
-
-
         # Get current gripper pose from input port
         body_poses = self.get_input_port(1).Eval(context)  # "iiwa_current_pose" input port
         gripper_body_idx = self.original_plant.GetBodyByName("body").index()  # BodyIndex object

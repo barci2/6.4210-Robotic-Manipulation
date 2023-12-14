@@ -435,10 +435,15 @@ def _ApplyDriverConfigSim(
         # Wsg controller.
         wsg_controller = builder.AddSystem(
             SchunkWsgPositionController(
-                kp_command=20000, kd_command=20,
-                kp_constraint=20000, kd_constraint=20,
+                kp_command=500, kd_command=20,
+                kp_constraint=2000, kd_constraint=20,
                 default_force_limit=1000, time_step=0.001
-            )#(kp_command=1000000, kd_command=1000, default_force_limit=1000, time_step=0.0001)
+            )
+            # SchunkWsgPositionController(
+            #     kp_command=20000, kd_command=20,
+            #     kp_constraint=20000, kd_constraint=20,
+            #     default_force_limit=1000, time_step=0.001
+            # )#(kp_command=1000000, kd_command=1000, default_force_limit=1000, time_step=0.0001)
         )
         wsg_controller.set_name(model_instance_name + ".controller")
         builder.Connect(

@@ -427,8 +427,8 @@ class GraspSelector(LeafSystem):
             min_cost_grasp_W = self.obj_pose_at_catch @ min_cost_grasp
 
             # draw best grasp gripper position in world
-            if (self.visualize):
-                self.draw_grasp_candidate(min_cost_grasp_W, prefix="gripper_best", random_transform=False)
+            # if (self.visualize):
+            #     self.draw_grasp_candidate(min_cost_grasp_W, prefix="gripper_best", random_transform=False)
 
             output.set_value({min_cost_grasp_W: obj_catch_t})
 
