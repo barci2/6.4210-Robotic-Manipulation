@@ -235,6 +235,7 @@ class TrajectoryPredictor(CameraBackedSystem):
             ransac_window: int,
             thrown_model_name: str,
             plant: MultibodyPlant,
+            estimate_pose: bool = True,
             meshcat: Optional[Meshcat] = None,
         ):
         super().__init__(
@@ -252,6 +253,7 @@ class TrajectoryPredictor(CameraBackedSystem):
         self._ransac_thresh = ransac_thresh
         self._ransac_rot_thresh = ransac_rot_thresh
         self._ransac_window = ransac_window
+        self._estimate_pose= estimate_pose
         # AddMeshcatTriad(self._meshcat, "obj_transform")
 
         # Input port for object point cloud for ICP
@@ -335,6 +337,8 @@ class TrajectoryPredictor(CameraBackedSystem):
 
             p_s = (X_star @ p_s.T).T
             X = X_star @ X
+        if not self._estimate_pose:
+            X.set_rotation(RotationMatrix())
         return X.inverse()
 
     def _update_ransac(self, context: Context, X: RigidTransform):
