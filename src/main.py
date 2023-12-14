@@ -214,6 +214,7 @@ elif throw_distance == "far":
         # For pill bottle:
         throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 4))
 
+
 # Example camera view
 # plt.imshow(icp_cameras[17].depth_image_32F_output_port().Eval(icp_cameras[17].GetMyContextFromRoot(simulator_context)).data[::-1])
 # plt.show()
