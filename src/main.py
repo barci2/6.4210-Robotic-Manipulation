@@ -22,7 +22,8 @@ import os
 import time
 from utils import (
     diagram_visualize_connections,
-    throw_object,
+    throw_object_close,
+    throw_object_far,
     ObjectTrajectory
 )
 from perception import PointCloudGenerator, TrajectoryPredictor, add_cameras
@@ -31,7 +32,10 @@ from grasping_selection import GraspSelector
 from motion_planner import MotionPlanner
 
 ##### Settings #####
-seed = 135#135
+seed = 135
+# throw_distance = "far"
+throw_distance = "close"
+
 close_button_str = "Close"
 scenario_file = "data/scenario.yaml"
 thrown_obj_prefix = "obj"
@@ -185,12 +189,23 @@ body = plant.get_body(body_idx)
 plant.SetFreeBodyPose(plant_context, body, RigidTransform(point_cloud_cameras_center))
 obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableContextFromRoot(simulator_context))
 
-# For tennis ball:
-# throw_object(plant, plant_context, obj_name, RotationMatrix())
-# For banana:
-# throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
-# For pill bottle:
-throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 4))
+
+# depending on throw trajectory, modify object angle
+if throw_distance == "close":
+    # For tennis ball:
+    throw_object_close(plant, plant_context, obj_name, RotationMatrix())
+    # For banana:
+    # throw_object_close(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
+    # For pill bottle:
+    # throw_object_close(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 4))
+
+elif throw_distance == "far":
+    # For tennis ball:
+    throw_object_far(plant, plant_context, obj_name, RotationMatrix())
+    # For banana:
+    # throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
+    # For pill bottle:
+    # throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 4))
 
 # Example camera view
 # plt.imshow(icp_cameras[17].depth_image_32F_output_port().Eval(icp_cameras[17].GetMyContextFromRoot(simulator_context)).data[::-1])
