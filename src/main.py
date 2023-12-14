@@ -193,20 +193,26 @@ obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableCont
 
 # depending on throw trajectory, modify object angle
 if throw_distance == "close":
-    # For tennis ball:
-    # throw_object_close(plant, plant_context, obj_name, RotationMatrix())
-    # For banana:
-    # throw_object_close(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
-    # For pill bottle:
-    throw_object_close(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 3.8))
+    if "ball" in obj_name:
+        # For tennis ball:
+        throw_object_close(plant, plant_context, obj_name, RotationMatrix())
+    if "banana" in obj_name:
+        # For banana:
+        throw_object_close(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
+    if "bottle" in obj_name:
+        # For pill bottle:
+        throw_object_close(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 3.8))
 
 elif throw_distance == "far":
-    # For tennis ball:
-    # throw_object_far(plant, plant_context, obj_name, RotationMatrix())
-    # For banana:
-    # throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
-    # For pill bottle:
-    throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 4))
+    if "ball" in obj_name:
+        # For tennis ball:
+        throw_object_far(plant, plant_context, obj_name, RotationMatrix())
+    if "banana" in obj_name:
+        # For banana:
+        throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
+    if "bottle" in obj_name:
+        # For pill bottle:
+        throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 4))
 
 # Example camera view
 # plt.imshow(icp_cameras[17].depth_image_32F_output_port().Eval(icp_cameras[17].GetMyContextFromRoot(simulator_context)).data[::-1])
