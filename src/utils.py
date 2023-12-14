@@ -70,9 +70,9 @@ def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str, o
     joint = plant.get_joint(joint_idx)  # Joint object
 
     # Generate random object pose
-    z = 0.5  # fixed z for now
-    x = np.random.uniform(2.6, 2.7) * np.random.choice([-1, 1])
-    y = np.random.uniform(2.6, 2.7) * np.random.choice([-1, 1])
+    z = 0.3  # fixed z for now
+    x = np.random.uniform(1.6, 1.7) #* np.random.choice([-1, 1])
+    y = np.random.uniform(1.6, 1.7) #* np.random.choice([-1, 1])
 
     # Set object pose
     body_idx = plant.GetBodyIndices(model_instance)[0]  # BodyIndex object
@@ -83,10 +83,8 @@ def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str, o
     # Unlock joint so object is subject to gravity
     joint.Unlock(plant_context)
 
-    v_magnitude = np.random.uniform(4.75, 5.0)
-    angle_perturb = np.random.uniform(0.11, 0.12) * np.random.choice(
-        [-1, 1]
-    )  # must perturb by at least 0.1 rad to avoid throwing directly at iiwa
+    v_magnitude = np.random.uniform(2.5, 2.75)#np.random.uniform(4.75, 5.0)
+    angle_perturb = -np.random.uniform(0.2, 0.21) #* np.random.choice([-1, 1]) # must perturb by at least 0.1 rad to avoid throwing directly at iiwa
     # ensure the perturbation is applied such that it directs the obj away from iiwa
     if x * y > 0:  # x and y have same sign
         cos_alpha = x / np.sqrt(x**2 + y**2) + angle_perturb
@@ -94,10 +92,10 @@ def throw_object(plant: MultibodyPlant, plant_context: Context, obj_name: str, o
     else:
         cos_alpha = x / np.sqrt(x**2 + y**2) + angle_perturb
         sin_alpha = y / np.sqrt(x**2 + y**2) + angle_perturb
-    z_perturb = np.random.uniform(-0.5, 0.5)
+    z_perturb = np.random.uniform(-0.1, 0.1)
     v_x = -v_magnitude * cos_alpha
     v_y = -v_magnitude * sin_alpha
-    v_z = 3.8 + z_perturb
+    v_z = 4.4 + z_perturb
 
     # Define the spatial velocity
     spatial_velocity = SpatialVelocity(

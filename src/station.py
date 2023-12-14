@@ -138,7 +138,8 @@ class Scenario:
 
     # Plant configuration (time step and contact parameters).
     plant_config: MultibodyPlantConfig = MultibodyPlantConfig(
-        discrete_contact_solver="sap"
+        discrete_contact_solver="sap",
+        time_step=0.001
     )
 
     # All of the fully deterministic elements of the simulation.
@@ -432,7 +433,13 @@ def _ApplyDriverConfigSim(
     elif isinstance(driver_config, SchunkWsgDriver):
         model_instance = sim_plant.GetModelInstanceByName(model_instance_name)
         # Wsg controller.
-        wsg_controller = builder.AddSystem(SchunkWsgPositionController())
+        wsg_controller = builder.AddSystem(
+            SchunkWsgPositionController(
+                kp_command=20000, kd_command=20,
+                kp_constraint=20000, kd_constraint=20,
+                default_force_limit=1000, time_step=0.001
+            )#(kp_command=1000000, kd_command=1000, default_force_limit=1000, time_step=0.0001)
+        )
         wsg_controller.set_name(model_instance_name + ".controller")
         builder.Connect(
             wsg_controller.get_generalized_force_output_port(),

@@ -55,7 +55,7 @@ class GraspSelector(LeafSystem):
         self.random_transform = RigidTransform([-1, -1, 1])  # used for visualizing grasp candidates off to the side
         self.selected_grasp_obj_frame = None
         self.obj_catch_t = None
-        self.visualize = True
+        self.visualize = False
 
 
     def draw_grasp_candidate(self, X_G, prefix="gripper", random_transform=True):
@@ -317,7 +317,7 @@ class GraspSelector(LeafSystem):
             if grasp_CoM_cost > grasp_CoM_cost_threshold or direction_cost > direction_cost_threshold or collision_cost > collision_cost_threshold:
                 return
 
-            print("passed grasping thresholds")
+            # print("passed grasping thresholds")
 
             # check_collision takes most of the runtime
             if (self.check_collision(obj_pc, new_X_OG) is not True) and self.check_nonempty(obj_pc, new_X_OG):  # no collision, and there is an object between fingers
@@ -344,6 +344,8 @@ class GraspSelector(LeafSystem):
 
         if len(candidate_lst) == 0:
             print("grasp sampling did not find any valid candidates.")
+
+        print(f"found {len(candidate_lst)} potential grasps")
 
         return candidate_lst
 

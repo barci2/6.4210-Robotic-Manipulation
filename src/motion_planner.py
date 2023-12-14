@@ -6,25 +6,19 @@ from pydrake.all import (
     LeafSystem,
     AbstractValue,
     DiagramBuilder,
-    Trajectory,
     BsplineTrajectory,
     CompositeTrajectory,
     PiecewisePolynomial,
     PathParameterizedTrajectory,
     KinematicTrajectoryOptimization,
-    MinimumDistanceLowerBoundConstraint,
     Parser,
     PositionConstraint,
     OrientationConstraint,
     SpatialVelocityConstraint,
     RigidTransform,
     Solve,
-    Sphere,
-    Rgba,
-    Quaternion,
     RotationMatrix,
-    SpatialVelocity,
-    JacobianWrtVariable
+    JacobianWrtVariable,
 )
 
 from manipulation.meshcat_utils import AddMeshcatTriad
@@ -55,7 +49,7 @@ class MotionPlanner(LeafSystem):
         self.DeclareAbstractInputPort("object_trajectory", obj_traj)
 
         iiwa_state = self.DeclareVectorInputPort(name="iiwa_state", size=14)  # 7 pos, 7 vel
-        
+
 
         self._traj_index = self.DeclareAbstractState(
             AbstractValue.Make(CompositeTrajectory([PiecewisePolynomial.FirstOrderHold(
@@ -132,17 +126,17 @@ class MotionPlanner(LeafSystem):
         self.meshcat.SetLine(name, pos_3d_matrix)
 
 
-    def build_post_catch_trajectory(self, 
-                                    plant, 
-                                    world_frame, 
-                                    gripper_frame,  
-                                    X_WCatch, 
-                                    catch_vel, 
-                                    iiwa_catch_pos, 
-                                    catch_time, 
+    def build_post_catch_trajectory(self,
+                                    plant,
+                                    world_frame,
+                                    gripper_frame,
+                                    X_WCatch,
+                                    catch_vel,
+                                    iiwa_catch_pos,
+                                    catch_time,
                                     traj_duration=0.1
                                     ):
-        
+
         # Assuming gripper continues at catch_vel for traj_duration time, figure out where iiwa ends up
         X_WEnd = RigidTransform(X_WCatch.rotation(), X_WCatch.translation() + catch_vel*traj_duration)
 
@@ -223,9 +217,9 @@ class MotionPlanner(LeafSystem):
         #         print(ik_result.GetInfeasibleConstraintNames(ik_prog))
         #     else:
         #         print("post-catch ik_result solve succeeded.")
-            
+
         #     q_waypoint = ik_result.GetSolution(q_variables)  # (7,) np array
-            
+
         #     post_catch_traj = PiecewisePolynomial.FirstOrderHold([times[i-1], times[i]], np.column_stack([q_prev, q_waypoint]))
 
         #     q_prev = q_waypoint
@@ -237,16 +231,16 @@ class MotionPlanner(LeafSystem):
         # return complete_post_catch_traj
 
 
-    def add_constraints(self, 
-                        plant, 
-                        plant_context, 
-                        plant_autodiff, 
-                        trajopt, 
-                        world_frame, 
-                        gripper_frame, 
-                        X_WStart, 
-                        X_WGoal, 
-                        obj_traj, 
+    def add_constraints(self,
+                        plant,
+                        plant_context,
+                        plant_autodiff,
+                        trajopt,
+                        world_frame,
+                        gripper_frame,
+                        X_WStart,
+                        X_WGoal,
+                        obj_traj,
                         obj_catch_t,
                         current_gripper_vel,
                         duration_target,
@@ -254,8 +248,8 @@ class MotionPlanner(LeafSystem):
                         acceptable_pos_err=0.02,
                         theta_bound = 0.4,
                         acceptable_vel_err=0.1):
-        
-        trajopt.AddPathLengthCost(1.0)
+
+        # trajopt.AddPathLengthCost(1.0)
 
         trajopt.AddPositionBounds(
             plant.GetPositionLowerLimits(), plant.GetPositionUpperLimits()
@@ -266,14 +260,30 @@ class MotionPlanner(LeafSystem):
 
         obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]
         # if object is up to 0.1m radius, make gripper arrive at catching pose that distance early
-        gripper_early_time = 0.1 / np.linalg.norm(obj_vel_at_catch)
-        duration_target -= gripper_early_time
-        print(f"gripper_early_time: {gripper_early_time}")
-        
+        # gripper_early_time = 0.08 / np.linalg.norm(obj_vel_at_catch)
+        # print(f"gripper_early_time: {gripper_early_time}")
+        # duration_target -= gripper_early_time
+        catch_time_normalized = duration_target / (duration_target + 0.5)
+        duration_target += 0.5
+
+        pre_gripper_time = duration_target - 0.5 - 0.12
+        pre_gripper_normalized_time = pre_gripper_time / duration_target
+        X_WO = obj_traj.value(obj_catch_t)
+        X_OG_W = X_WO.inverse() @ X_WGoal
+        X_WPreGoal = obj_traj.value(obj_catch_t - 0.12) @ X_OG_W
+
+        obj_vel_at_pre_catch = obj_traj.EvalDerivative(obj_catch_t - 0.12)[:3]
+
         print(f"duration_target: {duration_target}")
         trajopt.AddDurationConstraint(duration_target-acceptable_dur_err, duration_target+acceptable_dur_err)
 
         link_7_to_gripper_transform = RotationMatrix.MakeZRotation(np.pi / 2) @ RotationMatrix.MakeXRotation(np.pi / 2)
+
+        # To avoid segfaulting on the constraints being deallocated
+        global start_pos_constraint, start_orientation_constraint,\
+               pre_goal_pos_constraint, pre_goal_orientation_constraint, pre_goal_vel_constraint,\
+               goal_pos_constraint, goal_orientation_constraint, \
+               start_vel_constraint, final_vel_constraint
 
         # start constraint
         start_pos_constraint = PositionConstraint(
@@ -297,6 +307,28 @@ class MotionPlanner(LeafSystem):
         trajopt.AddPathPositionConstraint(start_pos_constraint, 0)
         trajopt.AddPathPositionConstraint(start_orientation_constraint, 0)
 
+        # Pre goal constraint
+        pre_goal_pos_constraint = PositionConstraint(
+            plant,
+            world_frame,
+            X_WPreGoal.translation() - max(acceptable_pos_err * 7, 0.2),  # lower limit
+            X_WPreGoal.translation() + max(acceptable_pos_err * 7, 0.2),  # upper limit
+            gripper_frame,
+            [0, 0, 0.1],
+            plant_context
+        )
+        pre_goal_orientation_constraint = OrientationConstraint(
+            plant,
+            world_frame,
+            X_WPreGoal.rotation(),  # orientation of X_WGoal in world frame ...
+            gripper_frame,
+            link_7_to_gripper_transform,  # ... must equal origin in gripper frame
+            theta_bound,
+            plant_context
+        )
+        trajopt.AddPathPositionConstraint(pre_goal_pos_constraint, pre_gripper_normalized_time)
+        trajopt.AddPathPositionConstraint(pre_goal_orientation_constraint, pre_gripper_normalized_time)
+
         # goal constraint
         goal_pos_constraint = PositionConstraint(
             plant,
@@ -316,8 +348,8 @@ class MotionPlanner(LeafSystem):
             theta_bound,
             plant_context
         )
-        trajopt.AddPathPositionConstraint(goal_pos_constraint, 1)
-        trajopt.AddPathPositionConstraint(goal_orientation_constraint, 1)
+        trajopt.AddPathPositionConstraint(goal_pos_constraint, catch_time_normalized)
+        trajopt.AddPathPositionConstraint(goal_orientation_constraint, catch_time_normalized)
 
         # Start with velocity equal to iiwa's current velocity
         # Current limitation: SpatialVelocityConstraint only takes into account translational velocity; not rotational
@@ -333,7 +365,7 @@ class MotionPlanner(LeafSystem):
 
         # end with velocity equal to object's velocity at that moment
         # DIVISION BY 3 IS TEMPORARY; HAVING SUCH HIGH ENDING VELOCITY MAKES IT VERY HARD FOR SNOPT TO SOLVE
-        catch_vel = obj_vel_at_catch*0.3  # (3,1) np array
+        catch_vel = obj_vel_at_catch * 0.3 # (3,1) np array
         final_vel_constraint = SpatialVelocityConstraint(
             plant_autodiff,
             plant_autodiff.world_frame(),
@@ -344,16 +376,9 @@ class MotionPlanner(LeafSystem):
             plant_autodiff.CreateDefaultContext(),
         )
 
-        # collision constraints
-        # collision_constraint = MinimumDistanceLowerBoundConstraint(
-        #     plant, 0.001, plant_context, None, 0.01
-        # )
-        # evaluate_at_s = np.linspace(0, 1, 50)
-        # for s in evaluate_at_s:
-        #     trajopt.AddPathPositionConstraint(collision_constraint, s)
+        trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
+        trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, catch_time_normalized)
 
-        return start_vel_constraint, final_vel_constraint
-    
 
     def compute_traj(self, context, state):
         print("motion_planner update event")
@@ -365,7 +390,7 @@ class MotionPlanner(LeafSystem):
         if (obj_traj == ObjectTrajectory()):  # default output of TrajectoryPredictor system; means that it hasn't seen the object yet
             # print("received default obj traj (in compute_traj). returning from compute_traj.")
             return
-        
+
         # Get current gripper pose from input port
         body_poses = self.get_input_port(1).Eval(context)  # "iiwa_current_pose" input port
         gripper_body_idx = self.original_plant.GetBodyByName("body").index()  # BodyIndex object
@@ -385,10 +410,10 @@ class MotionPlanner(LeafSystem):
         j_plant_context = j_plant.CreateDefaultContext()
         j_plant.SetPositions(j_plant_context, j_iiwa, q_current)
         # Build Jacobian to solve for translational velocity from joint velocities
-        J = j_plant.CalcJacobianTranslationalVelocity(j_plant_context, 
-                                                      JacobianWrtVariable.kQDot, 
-                                                      j_plant.GetFrameByName("iiwa_link_7"), 
-                                                      [0, 0, 0.1],  # offset from iiwa_link_7_ to where gripper would be 
+        J = j_plant.CalcJacobianTranslationalVelocity(j_plant_context,
+                                                      JacobianWrtVariable.kQDot,
+                                                      j_plant.GetFrameByName("iiwa_link_7"),
+                                                      [0, 0, 0.1],  # offset from iiwa_link_7_ to where gripper would be
                                                       j_plant.world_frame(),  #
                                                       j_plant.world_frame()  # frame that translational velocity should be expressed in
                                                       )
@@ -450,7 +475,7 @@ class MotionPlanner(LeafSystem):
                 trajopt = KinematicTrajectoryOptimization(num_q, 8)  # 8 control points in Bspline
                 prog = trajopt.get_mutable_prog()
                 self.setSolverSettings(prog)
-                
+
                 if num_iter == 0:
                     print("using ik for initial guess")
                     # First solve the IK problem for X_WGoal. Then lin interp from start pos to goal pos,
@@ -490,26 +515,26 @@ class MotionPlanner(LeafSystem):
                     print("using previous iter as initial guess")
                     trajopt.SetInitialGuess(final_traj)
 
-                start_vel_constraint, final_vel_constraint = self.add_constraints(plant, 
-                                                                                plant_context, 
-                                                                                plant_autodiff, 
-                                                                                trajopt, 
-                                                                                world_frame, 
-                                                                                gripper_frame, 
-                                                                                X_WStart, 
-                                                                                X_WGoal, 
-                                                                                obj_traj, 
-                                                                                obj_catch_t,
-                                                                                current_gripper_vel,
-                                                                                duration_target=obj_catch_t-context.get_time(),
-                                                                                acceptable_dur_err=cur_acceptable_duration_err,
-                                                                                acceptable_pos_err=cur_acceptable_pos_err,
-                                                                                theta_bound=cur_theta_bound,
-                                                                                acceptable_vel_err=cur_acceptable_vel_err)
-                
+                self.add_constraints(plant,
+                                     plant_context,
+                                     plant_autodiff,
+                                     trajopt,
+                                     world_frame,
+                                     gripper_frame,
+                                     X_WStart,
+                                     X_WGoal,
+                                     obj_traj,
+                                     obj_catch_t,
+                                     current_gripper_vel,
+                                     duration_target=obj_catch_t-context.get_time(),
+                                     acceptable_dur_err=cur_acceptable_duration_err,
+                                     acceptable_pos_err=cur_acceptable_pos_err,
+                                     theta_bound=cur_theta_bound,
+                                     acceptable_vel_err=cur_acceptable_vel_err)
+
                 # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
-                trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
-                trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
+                # trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
+                # trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
                 # First solve with looser constraints
                 solver = SnoptSolver()
@@ -519,7 +544,7 @@ class MotionPlanner(LeafSystem):
                     print(result.GetInfeasibleConstraintNames(prog))
                     if final_traj is None:  # ensure final_traj is not None
                         final_traj = trajopt.ReconstructTrajectory(result)
-                    break
+                    raise RuntimeError()
                 else:
                     print(f"num_iter={num_iter} Solve succeeded.")
 
@@ -536,15 +561,15 @@ class MotionPlanner(LeafSystem):
                 num_iter += 1
 
                 # Also set the WSG trajectory once (this doesn't need to be updated in future cycles)
-                close_time = 0.05
-                time_offset = -0.0475
+                close_time = 0.0001
+                time_offset = 0.0#-0.01
                 wsg_open_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
                     [0, obj_catch_t+time_offset],
-                    np.array([[1, 1]])
+                    np.array([[0.1, 0.1]])
                 )
                 wsg_close_traj = PiecewisePolynomial.FirstOrderHold(  # simple open trajectory
                     [obj_catch_t+time_offset, obj_catch_t+time_offset+close_time],
-                    np.array([[1, 0]]) 
+                    np.array([[0.1, 0]])
                 )
 
                 wsg_complete_traj = CompositeTrajectory([wsg_open_traj, wsg_close_traj])
@@ -552,7 +577,7 @@ class MotionPlanner(LeafSystem):
                 state.get_mutable_abstract_state(int(self._traj_wsg_index)).set_value(wsg_complete_traj)
 
                 # Also set post-catch end position once (this doesn't ned to be updated in future cycles either)
-        
+
         # If this is not the first cycle (so we have a good initial guess already), then just go straight to an optimization w/strict constraints
         else:
             # Undraw previous trajctories that aren't actually being followed
@@ -566,23 +591,22 @@ class MotionPlanner(LeafSystem):
             trajopt = KinematicTrajectoryOptimization(num_q, 8)  # 8 control points in Bspline
             prog = trajopt.get_mutable_prog()
             self.setSolverSettings(prog)
-            start_vel_constraint, final_vel_constraint = self.add_constraints(plant, 
-                                                                              plant_context, 
-                                                                              plant_autodiff, 
-                                                                              trajopt, 
-                                                                              world_frame, 
-                                                                              gripper_frame, 
-                                                                              X_WStart, 
-                                                                              X_WGoal,  
-                                                                              obj_traj, 
-                                                                              obj_catch_t,
-                                                                              current_gripper_vel,
-                                                                              duration_target=obj_catch_t-context.get_time()
-                                                                              )
-            
+            self.add_constraints(plant,
+                                 plant_context,
+                                 plant_autodiff,
+                                 trajopt,
+                                 world_frame,
+                                 gripper_frame,
+                                 X_WStart,
+                                 X_WGoal,
+                                 obj_traj,
+                                 obj_catch_t,
+                                 current_gripper_vel,
+                                 duration_target=obj_catch_t-context.get_time())
+
             # For whatever reason, running AddVelocityConstraintAtNormalizedTime inside the function above causes segfault with no error message.
-            trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
-            trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
+            # trajopt.AddVelocityConstraintAtNormalizedTime(start_vel_constraint, 0)
+            # trajopt.AddVelocityConstraintAtNormalizedTime(final_vel_constraint, 1)
 
             trajopt.SetInitialGuess(self.previous_compute_result)
 
@@ -613,23 +637,23 @@ class MotionPlanner(LeafSystem):
         state.get_mutable_abstract_state(int(self._traj_index)).set_value(time_shifted_final_traj)
 
         self.previous_compute_result = final_traj  # save the solved trajectory to use as initial guess next iteration
-        
+
         self.obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]
 
-        # self.q_end = self.build_post_catch_trajectory(plant, 
-        #                                         world_frame, 
-        #                                         gripper_frame, 
-        #                                         X_WGoal, 
-        #                                         obj_vel_at_catch, 
-        #                                         time_shifted_final_traj.value(time_shifted_final_traj.end_time()), 
+        # self.q_end = self.build_post_catch_trajectory(plant,
+        #                                         world_frame,
+        #                                         gripper_frame,
+        #                                         X_WGoal,
+        #                                         obj_vel_at_catch,
+        #                                         time_shifted_final_traj.value(time_shifted_final_traj.end_time()),
         #                                         time_shifted_final_traj.end_time())
 
-        # post_catch_traj = self.build_post_catch_trajectory(plant, 
-        #                                                    world_frame, 
-        #                                                    gripper_frame, 
-        #                                                    X_WGoal, 
-        #                                                    obj_vel_at_catch, 
-        #                                                    time_shifted_final_traj.value(time_shifted_final_traj.end_time()), 
+        # post_catch_traj = self.build_post_catch_trajectory(plant,
+        #                                                    world_frame,
+        #                                                    gripper_frame,
+        #                                                    X_WGoal,
+        #                                                    obj_vel_at_catch,
+        #                                                    time_shifted_final_traj.value(time_shifted_final_traj.end_time()),
         #                                                    time_shifted_final_traj.end_time())
 
         # complete_traj = CompositeTrajectory([time_shifted_final_traj, post_catch_traj])
@@ -637,7 +661,6 @@ class MotionPlanner(LeafSystem):
         # self.VisualizePath(complete_traj, "complete traj")
 
         # state.get_mutable_abstract_state(int(self._traj_index)).set_value(complete_traj)
-
 
     def output_traj(self, context, output):
         # Just set value at output port according to context time and trajectory state variable
@@ -667,7 +690,7 @@ class MotionPlanner(LeafSystem):
                 traj_q.value(context.get_time()),
                 traj_q.EvalDerivative(context.get_time())
             ))
-            
+
 
     def output_acceleration(self, context, output):
         traj_q = context.get_mutable_abstract_state(int(self._traj_index)).get_value()

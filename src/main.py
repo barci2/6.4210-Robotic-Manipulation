@@ -6,7 +6,9 @@ from pydrake.all import (
     InverseDynamicsController,
     RigidTransform,
     MultibodyPlant,
-    RotationMatrix
+    RotationMatrix,
+    ConstantVectorSource,
+    AbstractValue
 )
 # from manipulation.station import MakeHardwareStation, load_scenario
 from station import MakeHardwareStation, load_scenario
@@ -29,7 +31,7 @@ from grasping_selection import GraspSelector
 from motion_planner import MotionPlanner
 
 ##### Settings #####
-seed = 135
+seed = 135#135
 close_button_str = "Close"
 scenario_file = "data/scenario.yaml"
 thrown_obj_prefix = "obj"
@@ -72,14 +74,15 @@ plant = station.GetSubsystemByName("plant")
     if model_name.startswith('obj')
 ]
 
+
 ### Camera Setup
 icp_cameras, icp_camera_transforms = add_cameras(
     builder=builder,
     station=station,
     plant=plant,
-    camera_width=800,
-    camera_height=600,
-    horizontal_num=8,
+    camera_width=800//2,
+    camera_height=600//2,
+    horizontal_num=4,
     vertical_num=5,
     camera_distance=7,
     cameras_center=[0, 0, 0]
@@ -113,7 +116,7 @@ traj_pred_system = builder.AddSystem(TrajectoryPredictor(
     cameras=icp_cameras,
     camera_transforms=icp_camera_transforms,
     pred_thresh=5,
-    pred_samples_thresh=10,  # how many views of object are needed before outputting predicted traj
+    pred_samples_thresh=6,  # how many views of object are needed before outputting predicted traj
     thrown_model_name=obj_name,
     ransac_iters=20,
     ransac_thresh=0.01,
@@ -184,7 +187,7 @@ obj_point_cloud_system.CapturePointCloud(obj_point_cloud_system.GetMyMutableCont
 # For pill bottle:
 # throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 6))
 # For banana:
-throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(-np.pi / 3))
+throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(-np.pi / 4))
 # For tennis ball, use either (it's a ball)
 
 # Example camera view
@@ -198,7 +201,7 @@ throw_object(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi
 ####################################
 ### Running Simulation & Meshcat ###
 ####################################
-simulator.set_target_realtime_rate(0.1)
+simulator.set_target_realtime_rate(1)
 simulator.set_publish_every_time_step(True)
 plt.show()
 
