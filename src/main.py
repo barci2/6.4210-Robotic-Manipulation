@@ -127,6 +127,7 @@ traj_pred_system = builder.AddSystem(TrajectoryPredictor(
     ransac_rot_thresh=0.1,
     ransac_window=30,
     plant=plant,
+    estimate_pose=("ball" not in obj_name),
     meshcat=meshcat
 ))
 traj_pred_system.ConnectCameras(builder, icp_cameras)
