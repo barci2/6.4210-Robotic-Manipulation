@@ -30,7 +30,7 @@ If you are running WSL2 on Windows, ensure you install the following to enable t
 
 ## Running
 ```
-python3 src/smain.py
+python src/main.py --obj ['t', 'b', or 'f'] --distance ['c' or 'f']
 ```
 
 ## Discussion of Architecture
