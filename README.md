@@ -1,5 +1,7 @@
 # Robotic Manipulation project
 
+[A robot arm that catches bananas!](https://www.youtube.com/watch?v=TrhjG72PJNU)
+
 ## Installations
 Our recommended setup requires using a Linux machine, or using WSL2 on Windows, with the following requirements:
 - `python` 3.8 or higher
@@ -37,6 +39,6 @@ python src/main.py --obj ['t', 'b', or 'f'] --distance ['c' or 'f']
     4. `PLANNING_EXECUTING_TRAJECTORY`
     5. `RETURNING_HOME`
 
-## Notes
+## Misc. Notes
  - `station.py` is a modified of `station.py` directly from drake. We imported it so that we could modify it such that we can export the `desired_acceleration` input port and also so that we could modify the PID gains of the WSG gripper.
  - In the SDF file of the object to be caught, the origin in the SDF file MUST roughly be at the object's centroid.
