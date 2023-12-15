@@ -1,6 +1,6 @@
 # Robotic Manipulation project
 
-[A robot arm that catches bananas!](https://www.youtube.com/watch?v=TrhjG72PJNU)
+[A robot arm that catches bananas!](https://www.youtube.com/watch?v=TrhjG72PJNU) (using the [Drake](https://drake.mit.edu/) simulation environment, ICP, RANSAC, kinematic trajectory optimization, and much more).
 
 ## Installations
 Our recommended setup requires using a Linux machine, or using WSL2 on Windows, with the following requirements:
@@ -8,7 +8,7 @@ Our recommended setup requires using a Linux machine, or using WSL2 on Windows, 
 - `pip` 23.3.1 or higher
 
 Necessary installs:
-- `pip install manipulation
+- `pip install manipulation`
 - `pip install --extra-index-url https://drake-packages.csail.mit.edu/whl/nightly/ 'drake==0.0.20231210'` (or any newer version of drake)
 - `pip install ipython`
 - `pip install pyvirtualdisplay`
@@ -32,12 +32,6 @@ python src/main.py --obj ['t', 'b', or 'f'] --distance ['c' or 'f']
     2. Grasp Selector
     3. Motion Planner
  - Each individual "system" is implemented as LeafSystem. These systems will all be added to the same diagram builder, which will link their inputs and outputs together.
- - A State Machine detemines helps each leaf system determine what to do at all times. The State Machine has the following states that transition linearly:
-    1. `WAITING_FOR_OBJECT`
-    2. `ESTIMATING_TRAJECTORY`
-    3. `SELECTING_GRASP`
-    4. `PLANNING_EXECUTING_TRAJECTORY`
-    5. `RETURNING_HOME`
 
 ## Misc. Notes
  - `station.py` is a modified of `station.py` directly from drake. We imported it so that we could modify it such that we can export the `desired_acceleration` input port and also so that we could modify the PID gains of the WSG gripper.
