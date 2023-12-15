@@ -165,6 +165,24 @@ def throw_object_far(plant: MultibodyPlant, plant_context: Context, obj_name: st
     )
 
 
+def calculate_obj_distance_to_gripper(gripper_pose, obj_pose):
+    """
+    Calculates distance from object to gripper in gripper frame z-axis.
+    """
+    # Get distance in gripper frame z-axis from gripper y-axis ray object pose using vector projections
+    vector_gripper_to_obj = obj_pose.translation() - gripper_pose.translation()
+    vector_gripper_y_axis = gripper_pose.rotation().matrix()[:, 1]
+    projection_vector_gripper_to_obj_onto_vector_gripper_y_axis = (np.dot(vector_gripper_to_obj, vector_gripper_y_axis) / np.linalg.norm(vector_gripper_y_axis)) * vector_gripper_y_axis  # Equation for projection of one vector onto another
+    distance_vector = vector_gripper_to_obj - projection_vector_gripper_to_obj_onto_vector_gripper_y_axis
+    # Project distance only to gripper frame z-axis so that deviations in other axes don't affect the time at which the grippers close
+    vector_gripper_z_axis = gripper_pose.rotation().matrix()[:, 2]
+    projection_distance_vector_onto_gripper_frame_z_axis = (np.dot(distance_vector, vector_gripper_z_axis) / np.linalg.norm(vector_gripper_z_axis)) * vector_gripper_z_axis  # Equation for projection of one vector onto another
+    
+    obj_distance_to_grasp = np.linalg.norm(projection_distance_vector_onto_gripper_frame_z_axis)
+
+    return obj_distance_to_grasp, vector_gripper_to_obj
+
+
 @dataclass
 class ObjectTrajectory:
     x: Tuple[np.float32, np.float32, np.float32] = (0, 0, 0)

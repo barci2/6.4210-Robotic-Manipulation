@@ -26,7 +26,7 @@ from manipulation.utils import ConfigureParser
 from pydrake.multibody import inverse_kinematics
 from pydrake.solvers import SnoptSolver, IpoptSolver
 
-from utils import ObjectTrajectory
+from utils import ObjectTrajectory, calculate_obj_distance_to_gripper
 
 
 class MotionPlanner(LeafSystem):
@@ -82,6 +82,7 @@ class MotionPlanner(LeafSystem):
         self.q_nominal = np.array([0.0, 0.6, 0.0, -1.75, 0.0, 1.0, 0.0])  # nominal joint for joint-centering
         self.q_end = None
         self.previous_compute_result = None  # BpslineTrajectory object
+        self.visualize = False
 
         self.desired_wsg_state = 1  # default open
 
@@ -125,7 +126,8 @@ class MotionPlanner(LeafSystem):
             ctr += 1
 
         # Draw line
-        self.meshcat.SetLine(name, pos_3d_matrix)
+        if self.visualize:
+            self.meshcat.SetLine(name, pos_3d_matrix)
 
 
     def build_post_catch_trajectory(self,
@@ -278,7 +280,7 @@ class MotionPlanner(LeafSystem):
 
         obj_vel_at_pre_catch = obj_traj.EvalDerivative(obj_catch_t - 0.12)[:3]
 
-        print(f"duration_target: {duration_target}")
+        # print(f"duration_target: {duration_target}")
         trajopt.AddDurationConstraint(duration_target-acceptable_dur_err, duration_target+acceptable_dur_err)
 
         link_7_to_gripper_transform = RotationMatrix.MakeZRotation(np.pi / 2) @ RotationMatrix.MakeXRotation(np.pi / 2)
@@ -352,7 +354,7 @@ class MotionPlanner(LeafSystem):
             theta_bound,
             plant_context
         )
-        print(f"catch_time_normalized: {catch_time_normalized}")
+        # print(f"catch_time_normalized: {catch_time_normalized}")
         trajopt.AddPathPositionConstraint(goal_pos_constraint, catch_time_normalized)
         trajopt.AddPathPositionConstraint(goal_orientation_constraint, catch_time_normalized)
 
@@ -430,7 +432,7 @@ class MotionPlanner(LeafSystem):
         if (X_WG.IsExactlyEqualTo(RigidTransform())):
             print("received default catch pose. returning from compute_traj.")
             return
-        print(f"obj_catch_t: {obj_catch_t}")
+        # print(f"obj_catch_t: {obj_catch_t}")
 
         # If it's getting close to catch time, stop updating trajectory
         if obj_catch_t - context.get_time() < 0.2:
@@ -454,10 +456,11 @@ class MotionPlanner(LeafSystem):
         X_WGoal = X_WG
         # print(f"X_WStart: {X_WStart}")
         # print(f"X_WGoal: {X_WGoal}")
-        # AddMeshcatTriad(self.meshcat, "start", X_PT=X_WStart, opacity=0.5)
-        # self.meshcat.SetTransform("start", X_WStart)
-        AddMeshcatTriad(self.meshcat, "goal", X_PT=X_WGoal, opacity=0.5)
-        self.meshcat.SetTransform("goal", X_WGoal)
+        if self.visualize:
+            # AddMeshcatTriad(self.meshcat, "start", X_PT=X_WStart, opacity=0.5)
+            # self.meshcat.SetTransform("start", X_WStart)
+            AddMeshcatTriad(self.meshcat, "goal", X_PT=X_WGoal, opacity=0.5)
+            self.meshcat.SetTransform("goal", X_WGoal)
 
         obj_vel_at_catch = obj_traj.EvalDerivative(obj_catch_t)[:3]  # (3,1) np array
         print(f"current_gripper_vel: {current_gripper_vel}")
@@ -565,7 +568,8 @@ class MotionPlanner(LeafSystem):
             # Undraw previous trajctories that aren't actually being followed
             for i in range(MAX_ITERATIONS):
                 try:
-                    self.meshcat.Delete(f"traj iter={i}")
+                    if self.visualize:
+                        self.meshcat.Delete(f"traj iter={i}")
                 except:
                     pass
 
@@ -698,16 +702,7 @@ class MotionPlanner(LeafSystem):
         obj_body_idx = self.original_plant.GetBodyByName(obj_body_name).index()  # BodyIndex object
         current_obj_pose = body_poses[obj_body_idx]  # RigidTransform object
 
-        # Get distance in gripper frame z-axis from gripper y-axis ray object pose using vector projections
-        vector_gripper_to_obj = current_obj_pose.translation() - current_gripper_pose.translation()
-        vector_gripper_y_axis = current_gripper_pose.rotation().matrix()[:, 1]
-        projection_vector_gripper_to_obj_onto_vector_gripper_y_axis = (np.dot(vector_gripper_to_obj, vector_gripper_y_axis) / np.linalg.norm(vector_gripper_y_axis)) * vector_gripper_y_axis  # Equation for projection of one vector onto another
-        distance_vector = vector_gripper_to_obj - projection_vector_gripper_to_obj_onto_vector_gripper_y_axis
-        # Project distance only to gripper frame z-axis so that deviations in other axes don't affect the time at which the grippers close
-        vector_gripper_z_axis = current_gripper_pose.rotation().matrix()[:, 2]
-        projection_distance_vector_onto_gripper_frame_z_axis = (np.dot(distance_vector, vector_gripper_z_axis) / np.linalg.norm(vector_gripper_z_axis)) * vector_gripper_z_axis  # Equation for projection of one vector onto another
-        
-        obj_distance_to_grasp = np.linalg.norm(projection_distance_vector_onto_gripper_frame_z_axis)
+        obj_distance_to_grasp, vector_gripper_to_obj = calculate_obj_distance_to_gripper(current_gripper_pose, current_obj_pose)
 
         DISTANCE_TRESHOLD_TO_GRASP = 0.01
 

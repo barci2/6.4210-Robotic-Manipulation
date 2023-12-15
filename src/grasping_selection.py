@@ -33,7 +33,7 @@ class GraspSelector(LeafSystem):
     sample potential grasps until finding one at a desirable position for iiwa.
     """
 
-    def __init__(self, plant, scene_graph, meshcat, thrown_model_name):
+    def __init__(self, plant, scene_graph, meshcat, thrown_model_name, grasp_random_seed):
         LeafSystem.__init__(self)
 
         obj_pc = AbstractValue.Make(PointCloud())
@@ -53,10 +53,11 @@ class GraspSelector(LeafSystem):
         self.scene_graph = scene_graph
         self.meshcat = meshcat
         self.thrown_model_name = thrown_model_name
+        self.grasp_random_seed = grasp_random_seed
         self.random_transform = RigidTransform([-1, -1, 1])  # used for visualizing grasp candidates off to the side
         self.selected_grasp_obj_frame = None
         self.obj_catch_t = None
-        self.visualize = True
+        self.visualize = False
 
 
     def draw_grasp_candidate(self, X_G, prefix="gripper", random_transform=True):
@@ -287,7 +288,7 @@ class GraspSelector(LeafSystem):
         return final_cost, distance_obj_pc_centroid_to_X_OG_y_axis, direction, alignment
 
 
-    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=2000, grasp_random_seed=2):
+    def compute_candidate_grasps(self, obj_pc, obj_pc_centroid, obj_catch_t, candidate_num=2000):
         """
         Args:
             - obj_pc (PointCloud object): pointcloud of the object.
@@ -297,7 +298,7 @@ class GraspSelector(LeafSystem):
         """
 
         # Constants for random variation
-        np.random.seed(grasp_random_seed)
+        np.random.seed(self.grasp_random_seed)
 
         # Build KD tree for the pointcloud.
         kdtree = KDTree(obj_pc.xyzs().T)

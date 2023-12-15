@@ -28,6 +28,8 @@ If you are running WSL on Windows, ensure you install the following to enable th
 python src/main.py --obj ['t', 'b', or 'f'] --distance ['c' or 'f']
 ```
 
+Additional Visualization can be turned on or off in the constructors of `GraspSelector` and `MotionPlanner` using the `self.visualize` variables.
+
 ## Discussion of Architecture
  - The program contains 3 core "systems":
     1. Object Ballistic Trajectory Estimator

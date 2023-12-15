@@ -216,7 +216,8 @@ class PointCloudGenerator(CameraBackedSystem):
         points = (self.GetCameraPoints(context).T - self._cameras_center).T
         self._point_cloud = PointCloud(points.shape[1])
         self._point_cloud.mutable_xyzs()[:] = points
-        self.PublishMeshcat(points)
+        if self._meshcat is not None:
+            self.PublishMeshcat(points)
 
 pred_traj_calls = 0
 class TrajectoryPredictor(CameraBackedSystem):
@@ -254,7 +255,8 @@ class TrajectoryPredictor(CameraBackedSystem):
         self._ransac_rot_thresh = ransac_rot_thresh
         self._ransac_window = ransac_window
         self._estimate_pose = estimate_pose
-        # AddMeshcatTriad(self._meshcat, "obj_transform")
+        # if self._meshcat is not None:
+            # AddMeshcatTriad(self._meshcat, "obj_transform")
 
         # Input port for object point cloud for ICP
         self._obj_point_cloud_input = self.DeclareAbstractInputPort(
@@ -282,7 +284,8 @@ class TrajectoryPredictor(CameraBackedSystem):
 
     def PredictTrajectory(self, context: Context):
         scene_points = self.GetCameraPoints(context)
-        self.PublishMeshcat(scene_points)
+        if self._meshcat is not None:
+            self.PublishMeshcat(scene_points)
         if scene_points.shape[1] == 0:
             return
 
@@ -293,8 +296,9 @@ class TrajectoryPredictor(CameraBackedSystem):
         # self._meshcat.SetTransform("obj_transform", X)
         global pred_traj_calls
         pred_traj_calls += 1
-        self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.005), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
-        self._meshcat.SetTransform(f"PredTrajSpheres/{pred_traj_calls}", X)
+        if self._meshcat is not None:
+            self._meshcat.SetObject(f"PredTrajSpheres/{pred_traj_calls}", Sphere(0.005), Rgba(159 / 255, 131 / 255, 3 / 255, 1))
+            self._meshcat.SetTransform(f"PredTrajSpheres/{pred_traj_calls}", X)
 
     def _maybe_init_point_cloud(self, context: Context):
         if self._point_kd_tree is None:
@@ -378,9 +382,10 @@ class TrajectoryPredictor(CameraBackedSystem):
 
 
         # Plot spheres along predicted trajectory
-        for t in np.linspace(0, 1, 100):
-            self._meshcat.SetObject(f"RansacSpheres/{t}", Sphere(0.01), Rgba(0.2, 0.2, 1, 1))
-            self._meshcat.SetTransform(f"RansacSpheres/{t}", RigidTransform(best_traj.value(t)))
+        if self._meshcat is not None:
+            for t in np.linspace(0, 1, 100):
+                self._meshcat.SetObject(f"RansacSpheres/{t}", Sphere(0.01), Rgba(0.2, 0.2, 1, 1))
+                self._meshcat.SetTransform(f"RansacSpheres/{t}", RigidTransform(best_traj.value(t)))
 
         context.SetAbstractState(self._traj_state, best_traj)
 

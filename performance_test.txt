@@ -1,0 +1,7 @@
+obj_tennis_ball	10
+obj_tennis_ball	11
+obj_tennis_ball	12
+obj_tennis_ball	13
+obj_tennis_ball	14
+obj_tennis_ball	15
+obj_tennis_ball	16

@@ -27,7 +27,8 @@ from utils import (
     diagram_visualize_connections,
     throw_object_close,
     throw_object_far,
-    ObjectTrajectory
+    ObjectTrajectory,
+    calculate_obj_distance_to_gripper
 )
 from perception import PointCloudGenerator, TrajectoryPredictor, add_cameras
 from grasping_selection import GraspSelector
@@ -38,6 +39,7 @@ from motion_planner import MotionPlanner
 parser = argparse.ArgumentParser()
 parser.add_argument('--obj', help="'t', 'b', or 'p' for 'Tennis_ball', 'Banana', or 'pill_bottle' object to be thrown.")
 parser.add_argument('--distance', help="'c' or 'f' for 'close' or 'far' throw.")
+parser.add_argument('--randomization', help="integer randomization seed.")
 args = parser.parse_args()
 
 if args.obj == 't':
@@ -63,6 +65,9 @@ else:
     print("Invalid argument for throw distance given to program. Defaulting to throwing object from close distance.")
     throw_distance = "close"
 
+grasp_random_seed = int(args.randomization)
+print(f"Randomization: {grasp_random_seed}")
+
     
 ##### Settings #####
 seed = 135
@@ -71,7 +76,7 @@ close_button_str = "Close"
 thrown_obj_prefix = "obj"
 this_drake_module_name = "cwd"
 point_cloud_cameras_center = [0, 0, 100]
-simulator_runtime = 1.0
+simulator_runtime = 0.875
 
 np.random.seed(seed)
 
@@ -158,13 +163,13 @@ traj_pred_system = builder.AddSystem(TrajectoryPredictor(
     ransac_window=30,
     plant=plant,
     estimate_pose=("ball" not in obj_name),
-    meshcat=meshcat
+    meshcat=None
 ))
 traj_pred_system.ConnectCameras(builder, icp_cameras)
 builder.Connect(obj_point_cloud_system.GetOutputPort("point_cloud"), traj_pred_system.point_cloud_input_port)
 
 ### Grasp Selector
-grasp_selector = builder.AddSystem(GraspSelector(plant, scene_graph, meshcat, obj_name))
+grasp_selector = builder.AddSystem(GraspSelector(plant, scene_graph, meshcat, obj_name, grasp_random_seed))
 builder.Connect(traj_pred_system.GetOutputPort("object_trajectory"), grasp_selector.GetInputPort("object_trajectory"))
 builder.Connect(obj_point_cloud_system.GetOutputPort("point_cloud"), grasp_selector.GetInputPort("object_pc"))
 
@@ -239,10 +244,10 @@ elif throw_distance == "far":
         throw_object_far(plant, plant_context, obj_name, RotationMatrix())
     if "banana" in obj_name:
         # For banana:
-        throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 4) @ RotationMatrix.MakeZRotation(-np.pi / 2))
+        throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 4) @ RotationMatrix.MakeXRotation(-np.pi / 3.6) @ RotationMatrix.MakeZRotation(-np.pi / 2))
     if "bottle" in obj_name:
         # For pill bottle:
-        throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 4))
+        throw_object_far(plant, plant_context, obj_name, RotationMatrix.MakeZRotation(-np.pi / 6) @ RotationMatrix.MakeXRotation(np.pi / 6))
 
 
 # Example camera view
@@ -257,9 +262,32 @@ simulator.set_target_realtime_rate(1)
 simulator.set_publish_every_time_step(True)
 plt.show()
 
-meshcat.StartRecording()
+# meshcat.StartRecording()
 simulator.AdvanceTo(simulator_runtime)
-meshcat.PublishRecording()
+# meshcat.PublishRecording()
 
-while not meshcat.GetButtonClicks(close_button_str):
-    pass
+### Decide if catch was a success or not
+body_poses = station.GetOutputPort("body_poses").Eval(station_context)
+gripper_body_idx = plant.GetBodyByName("body").index()  # BodyIndex object
+gripper_pose = body_poses[gripper_body_idx]  # RigidTransform object
+
+# find body index of obj being thrown
+if plant.HasBodyNamed("Tennis_ball"):
+    obj_body_name = "Tennis_ball"
+elif plant.HasBodyNamed("Banana"):
+    obj_body_name = "Banana"
+elif plant.HasBodyNamed("pill_bottle"):
+    obj_body_name = "pill_bottle"
+
+obj_body_idx = plant.GetBodyByName(obj_body_name).index()  # BodyIndex object
+obj_pose = body_poses[obj_body_idx]  # RigidTransform object
+
+obj_distance_to_grasp, _ = calculate_obj_distance_to_gripper(gripper_pose, obj_pose)
+if obj_distance_to_grasp < 0.025:
+    print("CATCH SUCCESS")
+    with open('performance_test.txt', 'a') as file:
+        file.write(f"{obj_name}\t{grasp_random_seed}\n")
+
+
+# while not meshcat.GetButtonClicks(close_button_str):
+#     pass
