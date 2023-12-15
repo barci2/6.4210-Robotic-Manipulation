@@ -1,6 +1,5 @@
 # Blender v3.1.2 OBJ File: 'pill bottle.blend'
 # www.blender.org
-mtllib pill bottle.mtl
 o pill_bottle_Cylinder.001
 v 0.000000 0.089695 -0.055183
 v 0.010766 0.089695 -0.054123

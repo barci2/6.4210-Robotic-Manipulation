@@ -70,14 +70,6 @@ directives:
 #             rotation: !Rpy { deg: [0, 0, 0] }
 
 # - add_model:
-#     name: "obj_pill_bottle"
-#     file: "package://cwd/data/pill_bottle.sdf"
-#     default_free_body_pose:
-#         "pill_bottle":
-#             translation: [0, 0, 100]
-#             rotation: !Rpy { deg: [0, 0, 0] }
-
-# - add_model:
 #     name: "obj_mustard_bottle"
 #     file: "package://drake/manipulation/models/ycb/sdf/006_mustard_bottle.sdf"
 #     default_free_body_pose:

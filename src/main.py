@@ -20,6 +20,9 @@ import numpy as np
 matplotlib.use("tkagg")
 import os
 import time
+import argparse
+import yaml
+
 from utils import (
     diagram_visualize_connections,
     throw_object_close,
@@ -27,17 +30,44 @@ from utils import (
     ObjectTrajectory
 )
 from perception import PointCloudGenerator, TrajectoryPredictor, add_cameras
-
 from grasping_selection import GraspSelector
 from motion_planner import MotionPlanner
 
+
+##### Add Object to Scenario YAML File #####
+parser = argparse.ArgumentParser()
+parser.add_argument('--obj', help="'t', 'b', or 'p' for 'Tennis_ball', 'Banana', or 'pill_bottle' object to be thrown.")
+parser.add_argument('--distance', help="'c' or 'f' for 'close' or 'far' throw.")
+args = parser.parse_args()
+
+if args.obj == 't':
+    print("Throwing Tennis Ball")
+    scenario_file = "data/scenario_tennis_ball.yaml"
+elif args.obj == 'b':
+    print("Throwing Banana")
+    scenario_file = "data/scenario_banana.yaml"
+elif args.obj == 'p':
+    print("Throwing Pill Bottle.")
+    scenario_file = "data/scenario_pill_bottle.yaml"
+else:
+    print("Invalid argument for object given to program. Defaulting to tennis ball.")
+    scenario_file = "data/scenario_tennis_ball.yaml"
+
+if args.distance == 'c':
+    print("Throwing object from close distance.")
+    throw_distance = "close"
+elif args.distance == 'f':
+    print("Throwing object from far distance.")
+    throw_distance = "far"
+else:
+    print("Invalid argument for throw distance given to program. Defaulting to throwing object from close distance.")
+    throw_distance = "close"
+
+    
 ##### Settings #####
 seed = 135
-# throw_distance = "far"
-throw_distance = "close"
 
 close_button_str = "Close"
-scenario_file = "data/scenario.yaml"
 thrown_obj_prefix = "obj"
 this_drake_module_name = "cwd"
 point_cloud_cameras_center = [0, 0, 100]

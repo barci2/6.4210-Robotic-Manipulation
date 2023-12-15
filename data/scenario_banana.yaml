@@ -1,0 +1,157 @@
+###############
+# Robot Setup #
+###############
+
+# Notes:
+#  - If using iiwa7, weld `iiwa_link_0` to world. If using iiwa14, weld `base` to world.
+#  - Only `link` tags can be welded (?)
+
+model_drivers:
+    iiwa: !ForceDriver {}  # ForceDriver allows access to desired_state and desired_acceleration input ports for station (results in better traj following)
+    wsg: !SchunkWsgDriver {}
+
+directives:
+- add_model:
+    name: iiwa
+    file: package://drake/manipulation/models/iiwa_description/urdf/iiwa14_spheres_dense_collision.urdf
+    default_joint_positions:
+        iiwa_joint_1: [1.57]
+        iiwa_joint_2: [0.5]
+        iiwa_joint_3: [0]
+        iiwa_joint_4: [-1.2]
+        iiwa_joint_5: [0]
+        iiwa_joint_6: [0.8]
+        iiwa_joint_7: [1.57]
+
+- add_weld:
+    parent: world
+    child: iiwa::base
+
+- add_model:
+    name: wsg
+    file: package://drake/manipulation/models/wsg_50_description/sdf/schunk_wsg_50_with_tip.sdf
+    default_joint_positions:
+        left_finger_sliding_joint: [-0.055]
+        right_finger_sliding_joint: [0.055]
+
+- add_weld:
+    parent: iiwa::iiwa_link_7
+    child: wsg::body
+    X_PC:
+        translation: [0, 0, 0.09]
+        rotation: !Rpy { deg: [90, 0, 90]}
+
+################
+# Object Setup #
+################
+
+# - add_model:
+#     name: "obj_tennis_ball"
+#     file: "package://cwd/data/Tennis_ball.sdf"
+#     default_free_body_pose:
+#         "Tennis_ball":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
+
+- add_model:
+    name: "obj_banana"
+    file: "package://cwd/data/Banana.sdf"
+    default_free_body_pose:
+        "Banana":
+            translation: [0, 0, 100]
+            rotation: !Rpy { deg: [0, 0, 0] }
+
+# - add_model:
+#     name: "obj_pill_bottle"
+#     file: "package://cwd/data/pill_bottle.sdf"
+#     default_free_body_pose:
+#         "pill_bottle":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
+
+# - add_model:
+#     name: "obj_mustard_bottle"
+#     file: "package://drake/manipulation/models/ycb/sdf/006_mustard_bottle.sdf"
+#     default_free_body_pose:
+#         "base_link_mustard":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
+
+# - add_model:
+#     name: "obj_sugar_box"
+#     file: "package://drake/manipulation/models/ycb/sdf/004_sugar_box.sdf"
+#     default_free_body_pose:
+#         "base_link_sugar":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
+
+# - add_model:
+#     name: "obj_tomato_soup_can"
+#     file: "package://drake/manipulation/models/ycb/sdf/005_tomato_soup_can.sdf"
+#     default_free_body_pose:
+#         "base_link_soup":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
+
+# - add_model:
+#     name: "obj_potted_meat_can"
+#     file: "package://drake/manipulation/models/ycb/sdf/010_potted_meat_can.sdf"
+#     default_free_body_pose:
+#         "base_link_meat":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
+
+# - add_model:
+#     name: "obj_cracker_box" "package://drake/manipulation/models/ycb/sdf/003_cracker_box.sdf"
+#     default_free_body_pose:
+#         "base_link_cracker":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
+
+# - add_model:
+#     name: "obj_gelatin_box"
+#     file: "package://drake/manipulation/models/ycb/sdf/009_gelatin_box.sdf"
+#     default_free_body_pose:
+#         "base_link_gelatin":
+#             translation: [0, 0, 100]
+#             rotation: !Rpy { deg: [0, 0, 0] }
+
+################
+# Camera Setup #
+################
+
+# - add_model:
+#     name: camera0
+#     file: package://manipulation/camera_box.sdf
+
+# - add_model:
+#     name: camera1
+#     file: package://manipulation/camera_box.sdf
+
+# - add_weld:
+#     parent: world
+#     child: camera0::base
+#     X_PC:
+#         translation: [2, 1.5, 2]
+#         rotation: !Rpy {deg: [-30, 0, 135]}
+
+# - add_weld:
+#     parent: world
+#     child: camera1::base
+#     X_PC:
+#         translation: [0, -2, 2]
+#         rotation: !Pry {deg: [-30, 0, 0]}
+
+# cameras:
+#     camera0:
+#         name: camera0
+#         clipping_near: 0.1 # To clip out the camera object
+#         X_PB:
+#             base_frame: camera0::base
+#             rotation: !Rpy { deg: [-90, 0, 0]}
+#     camera1:
+#         name: camera1
+#         clipping_near: 0.1 # To clip out the camera object
+#         X_PB:
+#             base_frame: camera1::base
+#             rotation: !Rpy { deg: [-90, 0, 0]}
