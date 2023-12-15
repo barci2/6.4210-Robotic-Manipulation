@@ -27,19 +27,8 @@ python src/main.py --obj ['t', 'b', or 'f'] --distance ['c' or 'f']
 ## Discussion of Architecture
  - The program contains 3 core "systems":
     1. Object Ballistic Trajectory Estimator
-        - Input ports:
-        - Output ports:
-            - Trajectory object
-            - A downsampled PointCloud object (containing just the object) in Object frame
     2. Grasp Selector
-        - Input ports: 
-            - Trajectory object
-            - A downsampled PointCloud object (containing just the object) in Object frame
-        - Output ports:
-
     3. Motion Planner
-        - Input ports: 
-        - Output ports: 
  - Each individual "system" is implemented as LeafSystem. These systems will all be added to the same diagram builder, which will link their inputs and outputs together.
  - A State Machine detemines helps each leaf system determine what to do at all times. The State Machine has the following states that transition linearly:
     1. `WAITING_FOR_OBJECT`
