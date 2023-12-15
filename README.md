@@ -2,6 +2,8 @@
 
 [A robot arm that catches bananas!](https://www.youtube.com/watch?v=TrhjG72PJNU) (using the [Drake](https://drake.mit.edu/) simulation environment, ICP, RANSAC, kinematic trajectory optimization, and much more).
 
+![](catch_banana.gif)
+
 ## Installations
 Our recommended setup requires using a Linux machine, or using WSL2 on Windows, with the following requirements:
 - `python` 3.8 or higher
