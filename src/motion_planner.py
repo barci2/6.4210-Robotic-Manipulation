@@ -82,7 +82,7 @@ class MotionPlanner(LeafSystem):
         self.q_nominal = np.array([0.0, 0.6, 0.0, -1.75, 0.0, 1.0, 0.0])  # nominal joint for joint-centering
         self.q_end = None
         self.previous_compute_result = None  # BpslineTrajectory object
-        self.visualize = False
+        self.visualize = True
 
         self.desired_wsg_state = 1  # default open
 

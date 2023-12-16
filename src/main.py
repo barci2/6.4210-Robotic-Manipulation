@@ -163,7 +163,7 @@ traj_pred_system = builder.AddSystem(TrajectoryPredictor(
     ransac_window=30,
     plant=plant,
     estimate_pose=("ball" not in obj_name),
-    meshcat=None
+    meshcat=meshcat
 ))
 traj_pred_system.ConnectCameras(builder, icp_cameras)
 builder.Connect(obj_point_cloud_system.GetOutputPort("point_cloud"), traj_pred_system.point_cloud_input_port)
@@ -262,9 +262,9 @@ simulator.set_target_realtime_rate(1)
 simulator.set_publish_every_time_step(True)
 plt.show()
 
-# meshcat.StartRecording()
+meshcat.StartRecording()
 simulator.AdvanceTo(simulator_runtime)
-# meshcat.PublishRecording()
+meshcat.PublishRecording()
 
 ### Decide if catch was a success or not
 body_poses = station.GetOutputPort("body_poses").Eval(station_context)
@@ -289,5 +289,5 @@ if obj_distance_to_grasp < 0.05:
         file.write(f"{obj_name}\t{grasp_random_seed}\n")
 
 
-# while not meshcat.GetButtonClicks(close_button_str):
-#     pass
+while not meshcat.GetButtonClicks(close_button_str):
+    pass

@@ -57,7 +57,7 @@ class GraspSelector(LeafSystem):
         self.random_transform = RigidTransform([-1, -1, 1])  # used for visualizing grasp candidates off to the side
         self.selected_grasp_obj_frame = None
         self.obj_catch_t = None
-        self.visualize = False
+        self.visualize = True
 
 
     def draw_grasp_candidate(self, X_G, prefix="gripper", random_transform=True):
