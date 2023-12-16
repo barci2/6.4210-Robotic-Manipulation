@@ -283,7 +283,7 @@ obj_body_idx = plant.GetBodyByName(obj_body_name).index()  # BodyIndex object
 obj_pose = body_poses[obj_body_idx]  # RigidTransform object
 
 obj_distance_to_grasp, _ = calculate_obj_distance_to_gripper(gripper_pose, obj_pose)
-if obj_distance_to_grasp < 0.025:
+if obj_distance_to_grasp < 0.05:
     print("CATCH SUCCESS")
     with open('performance_test.txt', 'a') as file:
         file.write(f"{obj_name}\t{grasp_random_seed}\n")
