@@ -1,6 +1,6 @@
 # Robotic Manipulation project
 
-[A robot arm that catches bananas!](https://www.youtube.com/watch?v=TrhjG72PJNU) (using the [Drake](https://drake.mit.edu/) simulation environment, ICP, RANSAC, kinematic trajectory optimization, and much more).
+A robot arm that catches bananas! (using the [Drake](https://drake.mit.edu/) simulation environment, ICP, RANSAC, kinematic trajectory optimization, and much more).
 
 See the [**Project Report here**](https://drive.google.com/file/d/1uXrN3hdjM0pgB44X0Jx1yYVBb3VbIF40/view?usp=sharing) and the [**Project Video here**](https://www.youtube.com/watch?v=TrhjG72PJNU).
 
