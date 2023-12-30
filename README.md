@@ -37,6 +37,10 @@ Additional Visualization can be turned on or off in the constructors of `GraspSe
     3. Motion Planner
  - Each individual "system" is implemented as LeafSystem. These systems will all be added to the same diagram builder, which will link their inputs and outputs together.
 
+## Future Work
+ - Real time trajectory optimization: warm-starting the optimizer. While we do use the result of the previous traj opt as an initial guess for the next traj opt, we can go further to initialize the optimizer (SNOPT) with the same internal state between solves.
+ - Single optimization for both catching a motion-planning: speed up the grasp pose selection and also remove constraints on how the object must be caught.
+
 ## Misc. Notes
  - `station.py` is a modified of `station.py` directly from drake. We imported it so that we could modify it such that we can export the `desired_acceleration` input port and also so that we could modify the PID gains of the WSG gripper.
  - In the SDF file of the object to be caught, the origin in the SDF file MUST roughly be at the object's centroid.

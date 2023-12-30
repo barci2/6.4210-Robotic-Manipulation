@@ -249,3 +249,5 @@ obj_pill_bottle	53
 obj_pill_bottle	54
 obj_pill_bottle	55
 obj_pill_bottle	56
+obj_tennis_ball	9
+obj_banana	9
