@@ -211,11 +211,18 @@ simulator = Simulator(diagram)
 simulator_context = simulator.get_mutable_context()
 station_context = station.GetMyMutableContextFromRoot(simulator_context)
 plant_context = plant.GetMyMutableContextFromRoot(simulator_context)
+controller_context = controller.GetMyMutableContextFromRoot(simulator_context)
 
 
 ### Testing hardware
 # station.GetInputPort("iiwa.desired_state").FixValue(station_context, np.zeros(14)) # TESTING
 # station.GetInputPort("wsg.position").FixValue(station_context, [1]) # TESTING
+
+# controller.GetInputPort("desired_state").FixValue(controller_context, np.append(
+#     [1.57, 0.5, 0.0, -1.2, 0.0, 0.8, 1.57],
+#     np.zeros((7,)),
+# )) # TESTING
+# controller.GetInputPort("desired_acceleration").FixValue(controller_context, np.zeros(7)) # TESTING
 
 
 ### Capturing the point cloud for the robot
