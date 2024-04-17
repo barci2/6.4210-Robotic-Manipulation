@@ -32,7 +32,7 @@ python src/main.py --obj ['t', 'b', or 'f'] --distance ['c' or 'f']
 
 Additional Visualization can be turned on or off in the constructors of `GraspSelector` and `MotionPlanner` using the `self.visualize` variables.
 
-Note: if you encounter a bug where the object trajectory prediction system seems to return unreasonable results, read the comment on line 155 in `src/perception.py`.
+Note: if you encounter a bug where the object trajectory prediction system seems to return unreasonable results, read the comment on line 155 in `src/perception.py`. There may be a bug in Drake's camera simulator or OpenGL that occurs on some machines.
 
 ## Discussion of Architecture
  - The program contains 3 core "systems":
